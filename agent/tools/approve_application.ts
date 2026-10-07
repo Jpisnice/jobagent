@@ -1,4 +1,4 @@
-﻿import { defineTool } from "eve/tools";
+import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
 import { upsertJob } from "../lib/store";
@@ -15,6 +15,9 @@ export default defineTool({
     draft: z.string().describe("Cover letter / answers that will be submitted"),
   }),
   approval: always(),
+  label: {
+    start: ({ company, title }) => `Approve application: ${company} – ${title}`,
+  },
   async execute({ url, title, company }) {
     await upsertJob({ url, title, company, status: "approved" });
     return { approved: true, url, next: "Fill and submit the form, then record_job with status applied or failed." };

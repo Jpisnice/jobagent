@@ -18,6 +18,7 @@ export default defineTool({
   description:
     "Check whether the candidate's job profile exists and is complete. Call this FIRST in any session that will search for jobs or apply. Returns exists, complete, the list of missing items (each with a question to ask the user) and optional items worth asking once. If the profile is missing or incomplete, run profile onboarding before anything else.",
   inputSchema: z.object({}),
+  label: { start: () => "Check profile" },
   async execute() {
     const r = await readProfile();
     if (r.state === "missing") {

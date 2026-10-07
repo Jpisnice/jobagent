@@ -12,6 +12,9 @@ export default defineTool({
     summary: z.string().describe("One line on what is being submitted, shown in the approval prompt"),
   }),
   approval: always(),
+  label: {
+    start: ({ summary }) => `Submit: ${summary}`,
+  },
   async execute({ summary }, ctx) {
     const r = await runTask(
       {

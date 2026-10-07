@@ -27,10 +27,10 @@ async function expectAlwaysAsksUser(tool: any) {
 }
 const jobInput = { url: "https://jobs.example.com/1", title: "Engineer", company: "Acme" };
 
-// get_profile, draft_application and the matcher's get_profile are tested in onboarding.test.ts.
+// get_profile, draft_application and the matcher's slim profile are tested in onboarding.test.ts.
 describe("draft_application", () => {
   it("tells the model to use only the facts it was given", async () => {
-    const out = await call(await load("draft_application"), { title: "Engineer", company: "Acme" });
+    const out = await call(await load("draft_application"), { jobs: [{ title: "Engineer", company: "Acme" }] });
     expect(out.guidance).toMatch(/only/i);
   });
 });
@@ -55,6 +55,37 @@ describe("record_job", () => {
       Array.from({ length: 15 }, (_, i) => call(tool, { ...jobInput, url: `https://jobs.example.com/${i}`, status: "skipped" })),
     );
     expect(Object.keys(await ctx.store.getJobs())).toHaveLength(15);
+  });
+});
+
+describe("list_jobs", () => {
+  it("lists jobs newest first with counts per status, filtered by status", async () => {
+    await ctx.store.upsertJob({ ...jobInput, url: "https://jobs.example.com/a", status: "skipped" });
+    await new Promise((r) => setTimeout(r, 5));
+    await ctx.store.upsertJob({ ...jobInput, url: "https://jobs.example.com/b", status: "notified", score: 88 });
+    await new Promise((r) => setTimeout(r, 5));
+    await ctx.store.upsertJob({ ...jobInput, url: "https://jobs.example.com/c", status: "notified", score: 75 });
+    const tool = await load("list_jobs");
+
+    const all = await call(tool, {});
+    expect(all.total).toBe(3);
+    expect(all.counts).toMatchObject({ skipped: 1, notified: 2, applied: 0 });
+    expect(all.jobs.map((j: any) => j.url)).toEqual([
+      "https://jobs.example.com/c", "https://jobs.example.com/b", "https://jobs.example.com/a",
+    ]);
+
+    const notified = await call(tool, { status: ["notified"], limit: 1 });
+    expect(notified.matching).toBe(2);
+    expect(notified.jobs).toHaveLength(1);
+    expect(notified.jobs[0].url).toBe("https://jobs.example.com/c");
+  });
+
+  it("filters by date and rejects unknown statuses", async () => {
+    await ctx.store.upsertJob({ ...jobInput, status: "applied" });
+    const tool = await load("list_jobs");
+    expect((await call(tool, { since: "2999-01-01" })).jobs).toEqual([]);
+    expect((await call(tool, { since: "2000-01-01" })).jobs).toHaveLength(1);
+    expect(() => parseInput(tool, { status: ["maybe"] })).toThrow();
   });
 });
 
@@ -86,6 +117,7 @@ describe("send_alert", () => {
     expect(out).toEqual({ sent: true, notified: 1 });
     const req = calls[0]!;
     expect((req.init!.headers as Record<string, string>).authorization).toBe("Bearer re_test");
+    expect((req.init!.headers as Record<string, string>)["idempotency-key"]).toBe("jobagent-call-1");
     expect(JSON.parse(req.init!.body as string)).toMatchObject({
       from: "alerts@example.com", to: ["me@example.com"], subject: "3 new jobs",
     });

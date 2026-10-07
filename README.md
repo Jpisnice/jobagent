@@ -6,9 +6,10 @@ An [eve](https://eve.dev) agent that finds jobs matching your profile, checks ea
 
 1. **Onboarding.** If there is no profile yet, it asks for your resume (pasted, or a PDF/DOCX/TXT in `data/`), builds your profile from it, and asks about what a resume can't tell it: level, target roles, locations and work mode, salary floors, notice period, work authorization.
 2. **Search.** A daily schedule searches 13 public sources (below), drops senior and management titles, and skips jobs it has already seen.
-3. **Fit check.** A small `matcher` subagent gives each job a short verdict against your profile. Only jobs it marks relevant go any further.
+3. **Fit check.** A small `matcher` subagent reviews the postings in parallel batches and gives each one a verdict against your profile. Every verdict is saved, and only the relevant jobs go any further.
 4. **Alert.** You get one email digest of the good matches, each with a drafted application.
-5. **Apply.** In a chat, you approve a job and the agent fills in the form in your Chrome window. It stops before the final Submit button, and pressing it needs a second approval from you.
+5. **History.** Ask in chat what it sent you this week, or which jobs you approved but haven't applied to yet.
+6. **Apply.** In a chat, you approve a job and the agent fills in the form in your Chrome window. It stops before the final Submit button, and pressing it needs a second approval from you.
 
 The agent never submits without your approval, never types passwords, and never tries to get past a login or CAPTCHA. When it hits one it stops and asks you to deal with it in the open Chrome window.
 
@@ -16,8 +17,10 @@ The agent never submits without your approval, never types passwords, and never 
 
 ```
  eve agent (TypeScript, Gemini)
-   |-- tools: profile, job search, alerts, approvals
-   |-- matcher subagent (cheap, tightly capped fit checks)
+   |-- tools: profile, screen_jobs, alerts, job history, approvals
+   |     screen_jobs: search -> matcher batches in parallel -> record verdicts
+   |-- matcher subagent (no tools, one model call per batch, hard token cap)
+   |-- skills: onboarding and applying, loaded only when needed
    |-- schedule: daily search + email digest
    |
    |  HTTP, 127.0.0.1 only, token protected
@@ -102,6 +105,13 @@ This opens Chrome with its own profile and starts the browser service. Sign in t
 
 If it hits a login, account creation, CAPTCHA or verification code, it stops and asks you to handle it in the Chrome window, then continues from the same page when you say you are done. Applying never happens from the schedule, because a schedule can't ask you anything.
 
+## Keeping it cheap
+
+- `screen_jobs` keeps rejected postings out of the main model's context. The model only sees the jobs worth acting on, and it never has to copy postings into messages or record verdicts one call at a time.
+- The matcher gets the profile and the postings in one message, has no tools, and returns structured verdicts in a single model call per batch.
+- Onboarding and the browser-apply procedure are skills, so their instructions load only in the sessions that need them.
+- eve's default sandbox tools are turned off (`defaultTools: false`), so their schemas don't ride along on every call.
+
 ## Safety rules built in
 
 - Submitting needs your approval every time, enforced in code: the service blocks clicks on final-submit buttons unless the approved `browser_submit` tool started the run.
@@ -110,19 +120,23 @@ If it hits a login, account creation, CAPTCHA or verification code, it stops and
 - The browser service listens on `127.0.0.1` only and needs the token.
 - The agent uses only facts from your resume and your own answers, and is told never to invent experience.
 - Token caps limit each session, and the fit-check subagent has a very small budget, so a runaway loop can't run up a large bill.
+- Alert emails carry an idempotency key, so a retried step can't send the same email twice.
 
 ## Project layout
 
 ```
 agent/
-  instructions.md        the agent's behaviour: onboarding, workflow, rules
-  agent.ts               model, context window, compaction, usage caps
-  tools/                 profile_status, read_resume, save_profile, fetch_jobs,
-                         send_alert, record_job, draft_application,
-                         approve_application, browser_task, browser_submit, ...
-  subagents/matcher/     the fit checker
+  instructions.md        the agent's always-on behaviour: workflow and rules
+  agent.ts               model, context window, compaction, usage caps, no default tools
+  skills/                profile-onboarding, apply-in-browser (loaded on demand)
+  tools/                 profile_status, read_resume, save_profile, screen_jobs,
+                         fetch_jobs, list_jobs, send_alert, record_job,
+                         draft_application, approve_application, browser_task,
+                         browser_submit, ...
+  subagents/matcher/     the fit checker (reached only through screen_jobs)
   schedules/             daily job search
   lib/                   profile, resume reader, job store, browser client,
+                         search and screening helpers,
                          sources/ (one module per job source)
 browser-service/         Python service wrapping browser-use (server.py, tests/)
 scripts/browser.ps1      starts Chrome and the browser service

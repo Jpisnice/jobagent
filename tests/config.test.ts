@@ -82,13 +82,13 @@ describe("schedule", () => {
     expect(def.cron.trim().split(/\s+/)).toHaveLength(5);
     expect(def.markdown).toMatch(/matcher/);
     expect(def.markdown).toMatch(/Do NOT submit/i);
-    expect(def.markdown).toMatch(/fetch_jobs/);
+    expect(def.markdown).toMatch(/screen_jobs/);
   });
 
   it("checks the profile first and never tries to onboard, since a schedule cannot ask questions", async () => {
     const def = (await import("../agent/schedules/job-search")).default as any;
     expect(def.markdown.indexOf("profile_status")).toBeGreaterThanOrEqual(0);
-    expect(def.markdown.indexOf("profile_status")).toBeLessThan(def.markdown.indexOf("fetch_jobs"));
+    expect(def.markdown.indexOf("profile_status")).toBeLessThan(def.markdown.indexOf("screen_jobs"));
     expect(def.markdown).toMatch(/missing or incomplete.*send_alert.*stop/s);
   });
 });
@@ -103,6 +103,12 @@ describe("agent settings", () => {
     expect(def.limits.maxOutputTokensPerSession).toBeGreaterThan(0);
   });
 
+  it("turns off the unused default tools but keeps load_skill for the skills", async () => {
+    const def = (await import("../agent/agent")).default as any;
+    expect(def.defaultTools).toBe(false);
+    expect(read("agent/tools/load_skill.ts")).toMatch(/eve\/tools\/load_skill/);
+  });
+
   it("gives the matcher a hard, small budget", async () => {
     const def = (await import("../agent/subagents/matcher/agent")).default as any;
     expect(def.description).toBeTruthy();
@@ -110,12 +116,19 @@ describe("agent settings", () => {
     expect(def.limits.maxOutputTokensPerSession).toBeLessThanOrEqual(5_000);
     expect(def.limits.maxInputTokensPerSession).toBeLessThanOrEqual(100_000);
   });
+
+  it("hides the matcher behind screen_jobs and gives it no tools", async () => {
+    const def = (await import("../agent/subagents/matcher/agent")).default as any;
+    expect(def.tool).toBe(false);
+    expect(def.defaultTools).toBe(false);
+    expect(existsSync(join(root, "agent/subagents/matcher/tools"))).toBe(false);
+  });
 });
 
 describe("tool definitions", () => {
   const own = [
     "approve_application", "browser_submit", "browser_task", "draft_application", "fetch_jobs", "get_profile",
-    "profile_status", "read_resume", "record_job", "save_profile", "send_alert",
+    "list_jobs", "profile_status", "read_resume", "record_job", "save_profile", "screen_jobs", "send_alert",
   ];
 
   // Gemini rejects free-form maps ("Unsupported type: OBJECT"), so inputs must use lists of entries instead.
@@ -154,38 +167,50 @@ describe("tool definitions", () => {
 
 describe("instructions", () => {
   const instructions = read("agent/instructions.md");
+  const onboardingSkill = read("agent/skills/profile-onboarding.md");
+  const applySkill = read("agent/skills/apply-in-browser.md");
   const subagents = readdirSync(join(root, "agent/subagents"));
-  const known = new Set([...toolFiles, ...subagents]);
+  const skills = readdirSync(join(root, "agent/skills")).map((f) => f.replace(/\.md$/, ""));
+  const known = new Set([...toolFiles, ...subagents, ...skills]);
   // Tokens in backticks that are statuses or fields, not tools.
   const notTools = new Set(["needs_human", "needs_submit_approval", "min_score"]);
+  const quoted = (t: string) => `\`${t}\``;
 
-  it("only names tools and subagents that exist", () => {
-    const named = [...instructions.matchAll(/`([a-z]+(?:_[a-z]+)+)`/g)].map((m) => m[1]!).filter((t) => !notTools.has(t));
-    const missing = named.filter((t) => !known.has(t));
-    expect(missing).toEqual([]);
+  it.each([
+    ["instructions.md", instructions],
+    ["profile-onboarding skill", onboardingSkill],
+    ["apply-in-browser skill", applySkill],
+  ])("%s only names tools, subagents and skills that exist", (_name, text) => {
+    const named = [...text.matchAll(/`([a-z]+(?:[_-][a-z]+)+)`/g)].map((m) => m[1]!).filter((t) => !notTools.has(t));
+    expect(named.filter((t) => !known.has(t))).toEqual([]);
   });
 
-  it("names the matcher subagent and the approval tools", () => {
-    expect(subagents).toContain("matcher");
-    for (const t of ["matcher", "approve_application", "browser_task", "browser_submit", "fetch_jobs", "send_alert"]) {
-      expect(instructions).toContain(`\`${t}\``);
+  it("names the screening, approval and skill entry points", () => {
+    for (const t of ["profile_status", "screen_jobs", "draft_application", "send_alert", "approve_application", "browser_submit", "list_jobs", "profile-onboarding", "apply-in-browser"]) {
+      expect(instructions).toContain(quoted(t));
     }
   });
 
-  it("tells the agent to check the profile first and how to onboard a new user", () => {
-    const onboarding = instructions.slice(instructions.indexOf("# Profile onboarding"), instructions.indexOf("# Workflow"));
-    expect(onboarding.length).toBeGreaterThan(200);
-    for (const t of ["profile_status", "read_resume", "save_profile", "ask_question", "send_alert"]) {
-      expect(onboarding).toContain(`\`${t}\``);
-    }
-    expect(onboarding).toMatch(/FIRST/);
-    expect(onboarding).toMatch(/Scheduled runs cannot ask questions/);
-    expect(onboarding).toMatch(/Never invent/);
+  it("both skills carry a routing description", () => {
+    for (const text of [onboardingSkill, applySkill]) expect(text).toMatch(/^---\r?\ndescription: Use when .+\r?\n---/);
   });
 
-  it("onboarding comes before the job workflow", () => {
-    expect(instructions.indexOf("# Profile onboarding")).toBeGreaterThan(0);
-    expect(instructions.indexOf("# Profile onboarding")).toBeLessThan(instructions.indexOf("# Workflow"));
+  it("checks the profile first and keeps the scheduled-run rule in the always-on instructions", () => {
+    expect(instructions).toContain(`call \`profile_status\` FIRST`);
+    expect(instructions).toMatch(/Scheduled runs cannot ask questions/);
+  });
+
+  it("the onboarding skill covers resume reading, saving, questions and never inventing", () => {
+    for (const t of ["read_resume", "save_profile", "ask_question"]) expect(onboardingSkill).toContain(quoted(t));
+    expect(onboardingSkill).toMatch(/Never invent/);
+  });
+
+  it("the apply skill gates on approval and hands logins to the human", () => {
+    for (const t of ["approve_application", "browser_task", "browser_submit", "ask_question", "record_job"]) {
+      expect(applySkill).toContain(quoted(t));
+    }
+    expect(applySkill).toMatch(/needs_human/);
+    expect(applySkill).toMatch(/Never try to get past a login or CAPTCHA/);
   });
 
   it("keeps the safety rules", () => {
@@ -193,11 +218,11 @@ describe("instructions", () => {
     expect(instructions).toMatch(/Never invent/i);
   });
 
-  it("matcher instructions only use the matcher's own tool and ask for compact json", () => {
+  it("matcher instructions judge from the message alone and return one verdict per posting", () => {
     const text = read("agent/subagents/matcher/instructions.md");
-    expect(text).toContain("get_profile");
-    expect(text).not.toMatch(/fetch_jobs|send_alert|browser_/);
-    expect(text).toMatch(/ONLY a compact JSON array/);
+    expect(text).not.toMatch(/get_profile|fetch_jobs|send_alert|browser_/);
+    expect(text).toMatch(/one verdict per posting/);
+    expect(text).toContain(quoted("url"));
   });
 });
 

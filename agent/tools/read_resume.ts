@@ -8,6 +8,7 @@ export default defineTool({
   inputSchema: z.object({
     file: z.string().min(1).describe("File name inside data/, for example resume.pdf"),
   }),
+  label: { start: ({ file }) => `Read resume ${file}` },
   async execute({ file }) {
     return readResume(file);
   },

@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeDocx, sampleProfile, sampleResumeLines, useProfile } from "./fixtures";
 import { parseInput, toolCtx } from "./helpers";
+import { ProfileSchema } from "../agent/lib/profile";
+import { slimProfile } from "../agent/lib/screening";
 
 let env: ReturnType<typeof useProfile>;
 afterEach(() => env?.cleanup());
@@ -13,7 +15,6 @@ const modules: Record<string, () => Promise<{ default: unknown }>> = {
   "tools/save_profile": () => import("../agent/tools/save_profile"),
   "tools/get_profile": () => import("../agent/tools/get_profile"),
   "tools/draft_application": () => import("../agent/tools/draft_application"),
-  "subagents/matcher/tools/get_profile": () => import("../agent/subagents/matcher/tools/get_profile"),
 };
 const load = async (path: string) => (await modules[path]!()).default as any;
 const run = async (tool: any, input: unknown = {}) => tool.execute(parseInput(tool, input), toolCtx());
@@ -152,8 +153,7 @@ describe("save_profile", () => {
 describe("tools that need a profile", () => {
   it.each([
     ["tools/get_profile", {}],
-    ["tools/draft_application", { title: "Engineer", company: "Acme" }],
-    ["subagents/matcher/tools/get_profile", {}],
+    ["tools/draft_application", { jobs: [{ title: "Engineer", company: "Acme" }] }],
   ])("%s tells the model to run onboarding when there is no profile", async (path, input) => {
     env = useProfile(null);
     await expect(run(await load(path), input)).rejects.toThrow(/profile_status/);
@@ -164,16 +164,24 @@ describe("tools that need a profile", () => {
     expect(await run(await load("tools/get_profile"))).toMatchObject({ name: "Test Candidate", answers: { noticePeriod: "60 days" } });
   });
 
-  it("draft_application passes the candidate through", async () => {
+  it("draft_application returns the drafting facts once for every job, without contact details", async () => {
     env = useProfile();
-    const out = await run(await load("tools/draft_application"), { title: "Engineer", company: "Acme" });
+    const jobs = [{ title: "Engineer", company: "Acme" }, { title: "Backend Dev", company: "Globex" }];
+    const out = await run(await load("tools/draft_application"), { jobs });
     expect(out.candidate.name).toBe("Test Candidate");
-    expect(out.job).toMatchObject({ title: "Engineer", company: "Acme" });
+    expect(out.candidate.answers).toMatchObject({ noticePeriod: "60 days" });
+    expect(out.jobs).toEqual(jobs);
+    expect(JSON.stringify(out)).not.toMatch(/555 010|test.candidate@/);
   });
 
-  it("the matcher's profile is a slim view with no contact details", async () => {
-    env = useProfile();
-    const out = await run(await load("subagents/matcher/tools/get_profile"));
+  it("draft_application takes between one and ten jobs", async () => {
+    const tool = await load("tools/draft_application");
+    expect(() => parseInput(tool, { jobs: [] })).toThrow();
+    expect(() => parseInput(tool, { jobs: Array(11).fill({ title: "t", company: "c" }) })).toThrow();
+  });
+
+  it("the matcher's profile is a slim view with no contact details", () => {
+    const out = slimProfile(ProfileSchema.parse(sampleProfile()));
     expect(Object.keys(out).sort()).toEqual(["experience", "headline", "preferences", "projects", "skills"]);
     expect(out.experience[0]).toBe("Backend Engineer @ Initech (2023-02 to present)");
     expect(JSON.stringify(out)).not.toMatch(/555 010|test\.candidate@/);

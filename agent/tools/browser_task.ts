@@ -18,6 +18,10 @@ export default defineTool({
       .describe("Files from the project's data/ folder to upload, such as resume.pdf"),
     maxSteps: z.number().int().min(5).max(100).default(60),
   }),
+  label: {
+    start: ({ files }) => (files.length ? `Working in Chrome (uploading ${files.join(", ")})` : "Working in Chrome"),
+    complete: (_input, output) => `Chrome: ${(output as { status: string }).status}`,
+  },
   async execute({ task, files, maxSteps }, ctx) {
     const r = await runTask({ task, files, maxSteps, key: ctx.callId }, ctx.abortSignal);
     return {

@@ -7,6 +7,7 @@ export default defineTool({
   description:
     "Create or update the candidate's job profile. Send only what you have just learned (from the resume text or from the user's answers); everything else is kept. Scalars overwrite, contact and preferences merge field by field, skill groups, location rules and answers merge by name, and lists such as experience, projects and education are replaced when you send them. Use only facts the user gave or the resume states; never invent details. Returns what is still missing.",
   inputSchema: PatchSchema,
+  label: { start: () => "Save profile" },
   async execute(patch) {
     // A missing or damaged file is started fresh instead of merged into.
     const current = await readProfile();

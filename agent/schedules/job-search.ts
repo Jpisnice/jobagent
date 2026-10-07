@@ -5,5 +5,5 @@ import { defineSchedule } from "eve/schedules";
 export default defineSchedule({
   cron: "0 8 * * *",
   markdown:
-    "Run the daily job search. First call profile_status. If the profile is missing or incomplete, send one short send_alert email asking the user to open a chat and finish profile onboarding, then stop. Otherwise: get_profile, fetch_jobs with the profile keywords, send the new postings to the matcher subagent for a fit review, record_job every reviewed job (skipped for not relevant), then draft_application and send_alert one digest for only the jobs the matcher marked relevant. Do NOT submit any application. If nothing is relevant, send nothing.",
+    "Run the daily job search. First call profile_status. If the profile is missing or incomplete, send one short send_alert email asking the user to open a chat and finish profile onboarding, then stop. Otherwise call screen_jobs (it searches, has the matcher review fit and records every verdict). If it returns relevant jobs, call draft_application once with all of them and send ONE send_alert digest listing them. Do NOT submit any application. If nothing is relevant, send nothing.",
 });

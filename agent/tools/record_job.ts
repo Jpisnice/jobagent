@@ -1,4 +1,4 @@
-﻿import { defineTool } from "eve/tools";
+import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { upsertJob } from "../lib/store";
 
@@ -12,6 +12,9 @@ export default defineTool({
     status: z.enum(["seen", "notified", "approved", "applied", "failed", "skipped"]),
     note: z.string().optional(),
   }),
+  label: {
+    start: ({ company, title, status }) => `Mark ${company} – ${title} as ${status}`,
+  },
   async execute(input) {
     return await upsertJob(input);
   },

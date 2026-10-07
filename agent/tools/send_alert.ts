@@ -10,14 +10,22 @@ export default defineTool({
     body: z.string().describe("Plain text or HTML body"),
     jobs: z.array(z.object({ url: z.string().url(), title: z.string(), company: z.string(), score: z.number() })).default([]),
   }),
-  async execute({ subject, body, jobs }) {
+  label: {
+    start: ({ subject }) => `Email: ${subject}`,
+  },
+  async execute({ subject, body, jobs }, ctx) {
     const key = process.env.RESEND_API_KEY;
     const from = process.env.ALERT_FROM_EMAIL;
     if (!key || !from) throw new Error("Set RESEND_API_KEY and ALERT_FROM_EMAIL");
     const to = await alertEmail();
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${key}`,
+        "content-type": "application/json",
+        // A replayed step reuses the call id, so Resend drops the duplicate instead of emailing twice.
+        "idempotency-key": `jobagent-${ctx.callId}`,
+      },
       body: JSON.stringify({ from, to: [to], subject, html: body.includes("<") ? body : `<pre>${body}</pre>` }),
     });
     if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);

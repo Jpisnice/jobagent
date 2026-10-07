@@ -99,3 +99,19 @@ describe("getJobs / upsertJob", () => {
     await expect(ctx.store.upsertJob(job(2))).resolves.toMatchObject({ title: "Engineer 2" });
   });
 });
+
+describe("upsertJobs", () => {
+  it("writes a whole batch at once and merges into existing records", async () => {
+    await ctx.store.upsertJob(job(1, { note: "first" }));
+    const out = await ctx.store.upsertJobs([job(1, { status: "skipped" }), job(2), job(3)]);
+    expect(out).toHaveLength(3);
+    const all = await ctx.store.getJobs();
+    expect(Object.keys(all)).toHaveLength(3);
+    expect(all[ctx.store.jobId("https://jobs.example.com/1")]).toMatchObject({ status: "skipped", note: "first" });
+  });
+
+  it("leaves no temp file behind", async () => {
+    await ctx.store.upsertJobs([job(1)]);
+    expect(() => readFileSync(`${ctx.file}.tmp`)).toThrow();
+  });
+});

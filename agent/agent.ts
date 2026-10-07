@@ -9,6 +9,9 @@ const CONTEXT_WINDOW = 200_000;
 export default defineAgent({
   model: gemini(process.env.GEMINI_MODEL ?? "gemini-3-flash-preview"),
   modelContextWindowTokens: CONTEXT_WINDOW,
+  // No sandbox tools (bash, read_file, write_file) or root-copy `agent`: nothing here uses them, and
+  // their schemas would ride along on every model call. Authored tools under tools/ stay available.
+  defaultTools: false,
   compaction: {
     thresholdPercent: 0.6,
     modelContextWindowTokens: CONTEXT_WINDOW,
