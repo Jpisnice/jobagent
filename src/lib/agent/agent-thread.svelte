@@ -1,32 +1,35 @@
 <script lang="ts">
   import * as Conversation from "#lib/components/chat/conversation/index.ts";
-  import * as Message from "#lib/components/chat/message/index.ts";
   import * as Suggestions from "#lib/components/chat/suggestions/index.ts";
+  import WorkingIndicator from "#lib/components/chat/working-indicator.svelte";
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { cn } from "#lib/utils.ts";
   import CircleAlertIcon from "@lucide/svelte/icons/circle-alert";
   import ListChecksIcon from "@lucide/svelte/icons/list-checks";
-  import PaperclipIcon from "@lucide/svelte/icons/paperclip";
   import RotateCcwIcon from "@lucide/svelte/icons/rotate-ccw";
   import SearchIcon from "@lucide/svelte/icons/search";
   import TrophyIcon from "@lucide/svelte/icons/trophy";
   import UserRoundIcon from "@lucide/svelte/icons/user-round";
   import type { ConversationState, EveMessage, UseEveAgentReturn } from "eve/svelte";
   import { untrack } from "svelte";
-  import AgentActivity from "./agent-activity.svelte";
-  import AgentDecision from "./agent-decision.svelte";
-  import { type StreamInsights, lastTurnFailure, segmentParts } from "./format.ts";
+  import type { AgentActivity } from "./activity.ts";
+  import AgentMessage from "./agent-message.svelte";
+  import { type StreamInsights, lastTurnFailure } from "./format.ts";
 
   let {
     agent,
     insights,
+    activity,
+    busySince,
     onPick,
     onRetry,
   }: {
     agent: UseEveAgentReturn<ConversationState>;
     insights: StreamInsights;
+    activity: AgentActivity;
+    /** When the running turn started, for the working indicator's timer. */
+    busySince?: number;
     onPick: (prompt: string) => void;
     /** Sends your last message again after a failed reply. */
     onRetry: (text: string) => void;
@@ -61,12 +64,11 @@
 
   // Messages already here when the chat opened render still; only new ones animate in.
   const historyIds = new Set(untrack(() => agent.data.messages.map((message) => message.id)));
-  const isFresh = (message: EveMessage) => !historyIds.has(message.id);
 
   const busy = $derived(agent.status === "submitted" || agent.status === "streaming");
-  const lastIsUser = $derived(agent.data.messages.at(-1)?.role === "user");
   const count = $derived(agent.data.messages.length);
   const failure = $derived(lastTurnFailure(agent.data, agent.events));
+  const stopped = $derived(Object.values(agent.data.turns).at(-1)?.status === "cancelled");
   const lastUserText = $derived.by(() => {
     const message = agent.data.messages.findLast((candidate) => candidate.role === "user");
     return message ? plainText(message) : "";
@@ -110,91 +112,14 @@
       </Conversation.Empty>
     {:else}
       {#each agent.data.messages as message, index (message.id)}
-        {@const fresh = isFresh(message)}
-        {@const streaming = busy && index === count - 1}
-        {@const segments = message.role === "user" ? [] : segmentParts(message.parts)}
-        <!-- A reply that failed before saying anything has nothing to show; the failure says why. -->
-        {#if message.role === "user" || segments.length > 0}
-          <!-- Turns well above the fold skip rendering work until you scroll to them. -->
-          <Message.Root
-            from={message.role === "user" ? "user" : "assistant"}
-            class={cn(!fresh && index < count - 3 && "lazy-block", fresh && "arrive")}
-          >
-            {#if message.role === "user"}
-              <Message.Content
-                class={cn(
-                  message.metadata?.status === "failed" && "ring-1 ring-destructive",
-                  message.metadata?.optimistic && "opacity-70",
-                )}
-              >
-                {#each message.parts as part, partIndex (partIndex)}
-                  {#if part.type === "text"}
-                    {part.text}
-                  {:else if part.type === "file"}
-                    <span class="mt-1 flex items-center gap-1.5 text-[13px] text-muted-foreground">
-                      <PaperclipIcon class="size-3.5" />{part.filename ?? part.mediaType}
-                    </span>
-                  {/if}
-                {/each}
-              </Message.Content>
-              {#if message.metadata?.status === "failed"}
-                <span class="text-xs text-destructive">Not sent. Try again.</span>
-              {/if}
-            {:else}
-              <Message.Content>
-                {#each segments as segment (segment.key)}
-                  {#if segment.kind === "text"}
-                    <Message.Markdown
-                      text={segment.part.text}
-                      streaming={segment.part.state === "streaming"}
-                      animate={fresh}
-                    />
-                  {:else if segment.kind === "work"}
-                    <AgentActivity parts={segment.parts} conversation={agent.conversation} {insights} {fresh} />
-                  {:else if segment.kind === "decision"}
-                    <AgentDecision {agent} part={segment.part} labels={insights.labels} {fresh} />
-                  {:else if segment.part.type === "authorization"}
-                    {@const auth = segment.part}
-                    <div class="rounded-xl border bg-card px-5 py-4">
-                      {#if auth.state === "completed"}
-                        <p class="text-sm text-muted-foreground">
-                          {auth.outcome === "authorized"
-                            ? `Connected to ${auth.displayName}.`
-                            : `${auth.displayName} sign-in ${auth.outcome}.`}
-                        </p>
-                      {:else}
-                        <p class="font-medium">Sign in to {auth.displayName}</p>
-                        <p class="mt-1 text-sm text-muted-foreground">
-                          {auth.authorization?.instructions ?? auth.description}
-                        </p>
-                        <div class="mt-3 flex flex-wrap items-center gap-3">
-                          {#if auth.authorization?.userCode}
-                            <code class="rounded-md bg-muted px-2.5 py-1 font-mono text-sm">{auth.authorization.userCode}</code>
-                          {/if}
-                          {#if auth.authorization?.url}
-                            <Button href={auth.authorization.url} target="_blank" rel="noreferrer">
-                              Sign in to {auth.displayName}
-                            </Button>
-                          {/if}
-                        </div>
-                      {/if}
-                    </div>
-                  {:else if segment.part.type === "file"}
-                    <p class="flex items-center gap-1.5 text-[13px] text-muted-foreground">
-                      <PaperclipIcon class="size-3.5" />{segment.part.filename ?? segment.part.mediaType}
-                    </p>
-                  {/if}
-                {/each}
-              </Message.Content>
-              {@const text = plainText(message)}
-              {#if text && !streaming}
-                <Message.Actions>
-                  <Message.Copy {text} />
-                </Message.Actions>
-              {/if}
-            {/if}
-          </Message.Root>
-        {/if}
+        <AgentMessage
+          {agent}
+          {message}
+          {insights}
+          streaming={busy && index === count - 1}
+          fresh={!historyIds.has(message.id)}
+          lazy={!busy && historyIds.has(message.id) && index < count - 3}
+        />
       {/each}
 
       {#if failure && !busy}
@@ -212,11 +137,13 @@
         </Alert.Root>
       {/if}
 
-      {#if busy && lastIsUser}
-        <!-- Between your message and the agent's first word. -->
-        <p class="arrive text-sm" aria-label="The agent is reading your message">
-          <span class="shimmer">Reading your message…</span>
-        </p>
+      {#if stopped && !busy}
+        <p class="text-[13px] text-muted-foreground">You stopped this reply.</p>
+      {/if}
+
+      {#if activity.working}
+        <!-- Always in view at the end of the thread while the agent works. -->
+        <WorkingIndicator label={activity.label} since={busySince} />
       {/if}
     {/if}
   </Conversation.Content>

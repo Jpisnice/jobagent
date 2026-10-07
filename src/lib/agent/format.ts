@@ -77,88 +77,117 @@ function timeOf(event: MessageStreamEvent): number | undefined {
   return Number.isNaN(at) ? undefined : at;
 }
 
-export function streamInsights(events: readonly MessageStreamEvent[]): StreamInsights {
-  let agentName: string | undefined;
-  let eveVersion: string | undefined;
-  let modelId: string | undefined;
-  let steps = 0;
-  let sessionUsage: TokenTotals | undefined;
-  let stepUsage = EMPTY_TOTALS;
-  let lastStepUsage: TokenTotals | undefined;
-  let startedAt: number | undefined;
-  let lastEventAt: number | undefined;
-  const calls = new Map<string, CallTiming>();
-  const labels = new Map<string, string>();
+/**
+ * Builds {@link StreamInsights} as events arrive, reading each event once. The stream only ever
+ * grows, so each update starts where the last one stopped; a shorter or different stream (a reset
+ * chat) starts over.
+ */
+export class InsightsTracker {
+  #seen = 0;
+  #first: MessageStreamEvent | undefined;
+  #agentName: string | undefined;
+  #eveVersion: string | undefined;
+  #modelId: string | undefined;
+  #steps = 0;
+  #sessionUsage: TokenTotals | undefined;
+  #stepUsage = EMPTY_TOTALS;
+  #lastStepUsage: TokenTotals | undefined;
+  #startedAt: number | undefined;
+  #lastEventAt: number | undefined;
+  #calls = new Map<string, CallTiming>();
+  #labels = new Map<string, string>();
 
-  for (const event of events) {
+  update(events: readonly MessageStreamEvent[]): StreamInsights {
+    if (events.length < this.#seen || (events.length > 0 && events[0] !== this.#first)) this.#restart();
+    this.#first = events[0];
+    for (let index = this.#seen; index < events.length; index += 1) this.#read(events[index]);
+    this.#seen = events.length;
+    return {
+      agentName: this.#agentName,
+      eveVersion: this.#eveVersion,
+      modelId: this.#modelId,
+      steps: this.#steps,
+      sessionUsage: this.#sessionUsage,
+      stepUsage: this.#stepUsage,
+      lastStepUsage: this.#lastStepUsage,
+      // Fresh copies, so anything derived from them sees a change.
+      calls: new Map(this.#calls),
+      labels: new Map(this.#labels),
+      startedAt: this.#startedAt,
+      lastEventAt: this.#lastEventAt,
+    };
+  }
+
+  #restart() {
+    this.#seen = 0;
+    this.#agentName = this.#eveVersion = this.#modelId = undefined;
+    this.#steps = 0;
+    this.#sessionUsage = this.#lastStepUsage = undefined;
+    this.#stepUsage = EMPTY_TOTALS;
+    this.#startedAt = this.#lastEventAt = undefined;
+    this.#calls.clear();
+    this.#labels.clear();
+  }
+
+  #read(event: MessageStreamEvent) {
     if (
       (event.type === "actions.requested" || event.type === "action.result" || event.type === "action.partial") &&
       event.data.presentation
     ) {
       for (const [callId, presentation] of Object.entries(event.data.presentation)) {
-        if (presentation.label) labels.set(callId, presentation.label);
+        if (presentation.label) this.#labels.set(callId, presentation.label);
       }
     }
     const at = timeOf(event);
     if (at !== undefined) {
-      startedAt ??= at;
-      lastEventAt = at;
+      this.#startedAt ??= at;
+      this.#lastEventAt = at;
     }
     switch (event.type) {
       case "session.started":
-        agentName = event.data.runtime?.agentName ?? event.data.runtime?.agentId;
-        eveVersion = event.data.runtime?.eveVersion;
+        this.#agentName = event.data.runtime?.agentName ?? event.data.runtime?.agentId;
+        this.#eveVersion = event.data.runtime?.eveVersion;
         break;
       case "step.started":
-        modelId = event.data.modelId;
+        this.#modelId = event.data.modelId;
         break;
       case "step.completed": {
-        steps += 1;
+        this.#steps += 1;
         const usage = toTotals(event.data.usage);
         if (usage !== undefined) {
-          lastStepUsage = usage;
-          stepUsage = addTotals(stepUsage, usage);
+          this.#lastStepUsage = usage;
+          this.#stepUsage = addTotals(this.#stepUsage, usage);
         }
         break;
       }
       case "turn.waiting":
       case "session.waiting":
       case "session.failed":
-        sessionUsage = toTotals(event.data.usage) ?? sessionUsage;
+        this.#sessionUsage = toTotals(event.data.usage) ?? this.#sessionUsage;
         break;
       case "session.completed":
-        sessionUsage = toTotals(event.data?.usage) ?? sessionUsage;
+        this.#sessionUsage = toTotals(event.data?.usage) ?? this.#sessionUsage;
         break;
       case "actions.requested":
         if (at !== undefined) {
           for (const action of event.data.actions) {
-            if (!calls.has(action.callId)) calls.set(action.callId, { startedAt: at });
+            if (!this.#calls.has(action.callId)) this.#calls.set(action.callId, { startedAt: at });
           }
         }
         break;
       case "action.result": {
-        const timing = calls.get(event.data.result.callId);
+        const timing = this.#calls.get(event.data.result.callId);
         if (timing !== undefined && at !== undefined) {
-          calls.set(event.data.result.callId, { ...timing, endedAt: at });
+          this.#calls.set(event.data.result.callId, { ...timing, endedAt: at });
         }
         break;
       }
     }
   }
+}
 
-  return {
-    agentName,
-    eveVersion,
-    modelId,
-    steps,
-    sessionUsage,
-    stepUsage,
-    lastStepUsage,
-    calls,
-    labels,
-    startedAt,
-    lastEventAt,
-  };
+export function streamInsights(events: readonly MessageStreamEvent[]): StreamInsights {
+  return new InsightsTracker().update(events);
 }
 
 /** A part that belongs in a work log: reasoning or a tool call that needs nothing from you. */

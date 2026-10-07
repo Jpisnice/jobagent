@@ -1,64 +1,27 @@
 <script lang="ts">
   import { cn } from "#lib/utils.ts";
-  import { onDestroy, untrack } from "svelte";
-  import { renderMarkdown } from "../markdown.ts";
+  import { splitBlocks } from "../markdown.ts";
+  import MarkdownBlock from "./markdown-block.svelte";
 
   let {
     text,
     streaming = false,
-    animate = false,
     class: className,
   }: {
     text: string;
     /** More text is still arriving. */
     streaming?: boolean;
-    /** Reveal progressively; false for history, which renders whole. */
-    animate?: boolean;
     class?: string;
   } = $props();
 
-  const reducedMotion =
-    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  // Characters on screen. The model sends text in bursts; revealing it at a steady pace that
-  // speeds up with the backlog reads like writing instead of a series of jumps.
-  let shown = $state(untrack(() => (animate && !reducedMotion ? 0 : text.length)));
-  let frame: number | undefined;
-  let last = 0;
-
-  function tick(now: number) {
-    const elapsed = last === 0 ? 16 : Math.min(now - last, 64);
-    last = now;
-    const backlog = text.length - shown;
-    if (backlog <= 0) {
-      frame = undefined;
-      last = 0;
-      return;
-    }
-    // About 70 characters a second at rest, faster as text piles up, and quick once the stream ends.
-    const rate = 70 + backlog * (streaming ? 4 : 12);
-    shown = Math.min(text.length, shown + Math.max(1, Math.round((rate * elapsed) / 1000)));
-    frame = requestAnimationFrame(tick);
-  }
-
-  $effect(() => {
-    const target = text.length;
-    if (reducedMotion || !animate) {
-      shown = target;
-      return;
-    }
-    if (shown > target) shown = target;
-    if (shown < target && frame === undefined) frame = requestAnimationFrame(tick);
-  });
-
-  onDestroy(() => {
-    if (frame !== undefined) cancelAnimationFrame(frame);
-  });
-
-  const html = $derived(renderMarkdown(text.slice(0, shown)));
-  const writing = $derived(streaming || shown < text.length);
+  // While text streams in, each finished paragraph is its own block: it renders once and its
+  // DOM stays put, and only the paragraph being written re-renders. Finished text renders whole,
+  // so lists and links that span blank lines come out right.
+  const blocks = $derived(streaming ? splitBlocks(text) : [text]);
 </script>
 
-<div class={cn("prose prose-chat dark:prose-invert", writing && "caret", className)}>
-  {@html html}
+<div class={cn("prose prose-chat dark:prose-invert", streaming && "caret", className)}>
+  {#each blocks as block, index (index)}
+    <MarkdownBlock text={block} />
+  {/each}
 </div>

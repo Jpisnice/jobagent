@@ -2,16 +2,20 @@
   import * as PromptInput from "#lib/components/chat/prompt-input/index.ts";
   import CornerDownRightIcon from "@lucide/svelte/icons/corner-down-right";
   import type { ConversationInput, ConversationState, UseEveAgentReturn } from "eve/svelte";
+  import { openConversationInputs } from "eve/svelte";
+  import type { AgentActivity } from "./activity.ts";
 
   let {
     agent,
+    activity,
     value = $bindable(""),
     question,
     onSessionLost,
   }: {
     agent: UseEveAgentReturn<ConversationState>;
+    activity: AgentActivity;
     value?: string;
-    /** An open question that takes a typed answer; the box answers it instead of steering. */
+    /** An open question that takes a typed answer; the box answers it. */
     question?: ConversationInput;
     /** Called with the unsent text when the server no longer has this session. */
     onSessionLost?: (text: string) => void;
@@ -22,13 +26,16 @@
   let stopping = $state(false);
 
   const busy = $derived(agent.status === "submitted" || agent.status === "streaming");
-  const disabled = $derived(agent.status === "resuming");
   const answering = $derived(question !== undefined);
+  // An approval (or a question without a typed answer) is answered on its card, not here.
+  const choosing = $derived(!answering && openConversationInputs(agent.data).length > 0);
+  // One thing at a time: while a turn runs, the box waits; only a question opens it.
+  const locked = $derived(agent.status === "resuming" || (busy && !answering) || choosing);
   const choiceCount = $derived(question?.request.options?.length ?? 0);
 
-  // A new question pulls focus here so you can just start typing.
+  // A new question pulls focus here so you can just start typing; so does the box unlocking.
   $effect(() => {
-    if (question) textarea?.focus({ preventScroll: true });
+    if (question || !locked) textarea?.focus({ preventScroll: true });
   });
 
   export function focus() {
@@ -39,12 +46,10 @@
     failure = undefined;
     try {
       if (question) {
-        // Answering keeps the turn going; steering would withdraw the question.
         await agent.respond([{ requestId: question.request.requestId, text }]);
         return;
       }
-      // While a turn runs, a follow-up steers it instead of being rejected.
-      await agent.send(text, busy ? { turnPolicy: "steer" } : undefined);
+      await agent.send(text);
     } catch (error) {
       // The server forgot this session (e.g. `npm run dev` restarted); the client never replaces
       // a session on its own, so hand the message to a fresh chat instead of failing forever.
@@ -58,6 +63,7 @@
   }
 
   async function stop() {
+    if (stopping) return;
     stopping = true;
     try {
       await agent.cancel();
@@ -68,20 +74,33 @@
     }
   }
 
+  function onWindowKeydown(event: KeyboardEvent) {
+    // Esc stops the running turn, unless it is closing a dialog or menu.
+    if (event.key !== "Escape" || event.defaultPrevented || !busy || answering) return;
+    if (document.querySelector("[role='dialog'], [role='menu']")) return;
+    event.preventDefault();
+    void stop();
+  }
+
   const placeholder = $derived(
-    disabled
+    agent.status === "resuming"
       ? "Reconnecting to your conversation…"
       : answering
         ? "Type your answer…"
-        : busy
-          ? "Add a note to steer what it's doing…"
-          : "Ask about jobs, your profile, or an application…",
+        : choosing
+          ? "Choose an option above to continue"
+          : busy
+            ? "The agent is working. You can type once it's done."
+            : "Ask about jobs, your profile, or an application…",
   );
 </script>
 
+<svelte:window onkeydown={onWindowKeydown} />
+
 <PromptInput.Root
   bind:value
-  {disabled}
+  disabled={locked}
+  working={busy && !answering && !choosing}
   variant={answering ? "attention" : "default"}
   onSubmit={(text) => void sendText(text)}
 >
@@ -105,17 +124,16 @@
         Press 1–{choiceCount} to pick an option, or type your own answer
       {:else if answering}
         Enter sends your answer
-      {:else if busy}
-        Enter adds your note to the running task
+      {:else if busy && !choosing}
+        {activity.label}… Press Esc to stop
       {:else}
         Shift+Enter for a new line
       {/if}
     </PromptInput.Hint>
-    <div class="flex shrink-0 items-center gap-1.5">
-      {#if busy && !answering}
-        <PromptInput.Stop {stopping} onclick={stop} />
-      {/if}
+    {#if busy && !answering && !choosing}
+      <PromptInput.Stop {stopping} onclick={stop} />
+    {:else}
       <PromptInput.Submit label={answering ? "Send answer" : "Send"} />
-    </div>
+    {/if}
   </PromptInput.Toolbar>
 </PromptInput.Root>

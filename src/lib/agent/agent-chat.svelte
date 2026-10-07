@@ -15,7 +15,9 @@
   import AgentStatus from "./agent-status.svelte";
   import AgentThread from "./agent-thread.svelte";
   import { type SavedChat, chats } from "./chats.svelte.ts";
-  import { chatTitle, streamInsights } from "./format.ts";
+  import { describeActivity } from "./activity.ts";
+  import { AgentView } from "./agent-view.svelte.ts";
+  import { chatTitle } from "./format.ts";
 
   let {
     id,
@@ -40,7 +42,7 @@
   // The binding reads its options once; the page remounts this component to switch chats.
   const initial = untrack(() => ({ id, saved, ended }));
 
-  const agent = useEveAgent({
+  const live = useEveAgent({
     // Show what the matcher subagent does live, inside its tool step.
     followSubagents: true,
     initialEvents: initial.saved.events ?? [],
@@ -53,21 +55,28 @@
       saveNow();
     },
   });
+  // Everything on screen reads this: stream bursts land as one update per frame.
+  const agent = new AgentView(live);
+  const insights = $derived(agent.insights);
 
   const title = $derived(chats.get(id)?.title ?? chatTitle(agent.data.messages) ?? "New chat");
 
   function saveNow() {
     clearTimeout(saveTimer);
     saveTimer = undefined;
-    if (initial.ended || !agent.session) return;
-    chats.save(initial.id, { session: agent.session, events: agent.events }, title);
+    if (initial.ended || !live.session) return;
+    chats.save(initial.id, { session: live.session, events: live.events }, untrack(() => title));
   }
 
-  // Session changes can arrive per event while streaming; batch the writes.
+  // Writing the whole stream to storage is not free, so while a reply streams it is saved every
+  // few seconds, when the browser is idle; the end of a turn and leaving the page save at once.
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   function scheduleSave() {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(saveNow, 500);
+    if (saveTimer !== undefined) return;
+    saveTimer = setTimeout(() => {
+      if ("requestIdleCallback" in window) requestIdleCallback(saveNow, { timeout: 1000 });
+      else saveNow();
+    }, 3000);
   }
 
   // Leaving a chat mid-turn keeps the turn running on the server; coming back resumes it.
@@ -76,9 +85,16 @@
     if (chats.live?.id === initial.id) chats.live = undefined;
   });
 
-  const insights = $derived(streamInsights(agent.events));
+  const activity = $derived(describeActivity(agent, insights.labels));
   const busy = $derived(agent.status === "submitted" || agent.status === "streaming");
   const waiting = $derived(openConversationInputs(agent.data).length > 0);
+
+  // When the running turn started, for the working indicator's timer.
+  let busySince = $state<number | undefined>();
+  $effect(() => {
+    if (!busy) busySince = undefined;
+    else if (untrack(() => busySince) === undefined) busySince = Date.now();
+  });
 
   // The sidebar marks the open chat while it works or waits on you.
   $effect(() => {
@@ -115,11 +131,17 @@
   }
 </script>
 
+<svelte:head>
+  <title>{waiting ? "Needs your answer | " : busy ? "Working | " : ""}Job Agent</title>
+</svelte:head>
+
+<svelte:window onpagehide={() => saveTimer !== undefined && saveNow()} />
+
 <header class="flex h-14 shrink-0 items-center gap-2 border-b px-3 sm:px-4">
   <Sidebar.Trigger class="-ml-1" />
   <Separator orientation="vertical" class="mr-1 data-vertical:h-4" />
   <h1 class="hidden min-w-0 truncate text-sm font-medium sm:block">{title}</h1>
-  <AgentStatus {agent} labels={insights.labels} class="min-w-0 sm:ml-2 sm:border-l sm:pl-3" />
+  <AgentStatus {activity} class="min-w-0 sm:ml-2 sm:border-l sm:pl-3" />
   <div class="ml-auto flex shrink-0 items-center">
     <Tooltip.Root>
       <Tooltip.Trigger>
@@ -141,7 +163,14 @@
 </header>
 
 <div class="flex min-h-0 flex-1 flex-col">
-  <AgentThread {agent} {insights} onPick={pickSuggestion} onRetry={(text) => void composer?.sendText(text)} />
+  <AgentThread
+    {agent}
+    {insights}
+    {activity}
+    {busySince}
+    onPick={pickSuggestion}
+    onRetry={(text) => void composer?.sendText(text)}
+  />
 
   <div class="mx-auto flex w-full max-w-3xl flex-col gap-2.5 px-4 pb-4 sm:px-6">
     {#if ended}
@@ -167,7 +196,7 @@
         </Alert.Root>
       {/if}
       <AgentPendingInputs {agent} labels={insights.labels} />
-      <AgentComposer bind:this={composer} bind:value={draft} {agent} {question} {onSessionLost} />
+      <AgentComposer bind:this={composer} bind:value={draft} {agent} {activity} {question} {onSessionLost} />
     {/if}
   </div>
 </div>

@@ -1,9 +1,6 @@
-<script lang="ts" module>
-  export type StatusTone = "idle" | "working" | "attention" | "error";
-</script>
-
 <script lang="ts">
   import { cn } from "#lib/utils.ts";
+  import type { StatusTone } from "./status.ts";
 
   let { tone, class: className }: { tone: StatusTone; class?: string } = $props();
 
