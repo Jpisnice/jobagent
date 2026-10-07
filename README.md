@@ -76,18 +76,21 @@ The Gemini model names are `-preview` releases, which Google can change or retir
 
 ## Using it
 
-**First run: build your profile.** Start the agent and say hello:
+**First run: build your profile.** Start the web UI and the agent together, open http://localhost:5173, and say hello:
 
 ```bash
-npm run dev
+npm run dev          # SvelteKit chat UI + eve agent on one origin
+npm run dev:agent    # or: the agent alone, in eve's terminal UI
 ```
+
+The chat UI streams the agent's replies and shows every tool call as a card with its input, output, error and duration. It also shows the subagent's work inside its call, and asks your questions and approvals above the message box. A details panel (the button in the top right) shows the session, model, token usage and cost, turns, tasks, a tool timeline, and the raw event stream. Enter during a running turn steers it, and Stop cancels it. The conversation survives a page reload.
 
 It will notice there is no profile and walk you through onboarding. To give it your resume as a file, copy it into `data/` (for example `data/resume.pdf`) and tell it the file name. The profile is saved to `data/profile.json`, which is git-ignored. `data/profile.example.json` shows the shape.
 
 **Daily search.** The schedule `agent/schedules/job-search.ts` runs at 08:00 UTC. It checks the profile, searches, runs the fit check, and emails you a digest. `eve dev` never fires schedules, so to try one now:
 
 ```bash
-curl -X POST http://localhost:2000/eve/v1/dev/schedules/job-search
+curl -X POST http://localhost:5173/eve/v1/dev/schedules/job-search   # or :2000 under npm run dev:agent
 ```
 
 **Applying.** In a chat, tell the agent which job to apply to. Before it can open a form, start the browser side in a second terminal and leave it running:
@@ -138,6 +141,8 @@ agent/
   lib/                   profile, resume reader, job store, browser client,
                          search and screening helpers,
                          sources/ (one module per job source)
+src/                     SvelteKit chat UI (routes/, lib/chat/ components); vite.config.ts
+                         mounts the agent on the same origin with eveSvelteKit()
 browser-service/         Python service wrapping browser-use (server.py, tests/)
 scripts/browser.ps1      starts Chrome and the browser service
 data/                    companies.json, profile.example.json, your profile and resume
@@ -151,6 +156,7 @@ npm test               # agent tests (Vitest)
 npm run test:browser   # browser service tests (pytest)
 npm run test:all       # both
 npm run typecheck      # tsc, which also covers the tests
+npm run check          # svelte-check for the web UI
 ```
 
 The tests use fake data and never call Gemini, open Chrome, or touch your real profile. They don't cover real model behaviour or real job sites, so try a real run after changing the instructions or the browser service.
