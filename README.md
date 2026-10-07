@@ -1,6 +1,6 @@
 # jobagent
 
-An [eve](https://eve.dev) agent that finds jobs matching your profile, checks each one for fit, drafts your application, asks you before anything is sent, and emails you the results. It fills in application forms in your own Chrome window, so you can sign in or solve a CAPTCHA yourself and let the agent carry on.
+An [eve](https://eve.dev) agent that finds jobs matching your profile, checks each one for fit, drafts your application, asks you before anything is sent, and emails you the results. It fills in application forms in your own Chrome window, so you can sign in or solve a CAPTCHA yourself and let the agent carry on. You talk to it in a local web chat, where you watch it work and answer its questions and approvals.
 
 ## What it does
 
@@ -16,6 +16,9 @@ The agent never submits without your approval, never types passwords, and never 
 ## How it fits together
 
 ```
+ web chat UI (SvelteKit + shadcn-svelte)            npm run dev
+   |  /eve/v1 on the same origin: send, stream events, answer, cancel
+   v
  eve agent (TypeScript, Gemini)
    |-- tools: profile, screen_jobs, alerts, job history, approvals
    |     screen_jobs: search -> matcher batches in parallel -> record verdicts
@@ -76,18 +79,28 @@ The Gemini model names are `-preview` releases, which Google can change or retir
 
 ## Using it
 
-**First run: build your profile.** Start the agent and say hello:
+**First run: build your profile.** Start the web UI and the agent together, open http://localhost:5173, and say hello:
 
 ```bash
-npm run dev
+npm run dev          # SvelteKit chat UI + eve agent on one origin
+npm run dev:agent    # or: the agent alone, in eve's terminal UI
 ```
+
+In the chat:
+
+- Replies stream in as they're written. Tool calls fold into one activity line per step ("Checked your profile 31ms"); open it to see each call's input, output, error and duration, and the subagent's work inside its call.
+- While the agent works, the end of the thread says what it's doing with a running timer, and the browser tab reads "Working". The message box is locked until the reply ends; Stop (or Esc) interrupts it.
+- Questions and approvals appear in the thread as cards you answer with a click or a number key. A question with a free-text answer unlocks the message box for your answer. Amber is used only for things waiting on you.
+- If a reply fails (for example, the model is overloaded), the thread says why and offers Try again.
+- The sidebar keeps your chats on this device: rename, delete (with undo), and switch between them. Each chat has its own URL, and a chat left mid-reply picks up when you come back.
+- Session details (the button in the top right) show the session, model, token usage and cost, turns, tasks, a tool timeline, and the raw event stream.
 
 It will notice there is no profile and walk you through onboarding. To give it your resume as a file, copy it into `data/` (for example `data/resume.pdf`) and tell it the file name. The profile is saved to `data/profile.json`, which is git-ignored. `data/profile.example.json` shows the shape.
 
 **Daily search.** The schedule `agent/schedules/job-search.ts` runs at 08:00 UTC. It checks the profile, searches, runs the fit check, and emails you a digest. `eve dev` never fires schedules, so to try one now:
 
 ```bash
-curl -X POST http://localhost:2000/eve/v1/dev/schedules/job-search
+curl -X POST http://localhost:5173/eve/v1/dev/schedules/job-search   # or :2000 under npm run dev:agent
 ```
 
 **Applying.** In a chat, tell the agent which job to apply to. Before it can open a form, start the browser side in a second terminal and leave it running:
@@ -104,6 +117,24 @@ This opens Chrome with its own profile and starts the browser service. Sign in t
 4. asks you to approve the final Submit (`browser_submit`).
 
 If it hits a login, account creation, CAPTCHA or verification code, it stops and asks you to handle it in the Chrome window, then continues from the same page when you say you are done. Applying never happens from the schedule, because a schedule can't ask you anything.
+
+## How the web UI is built
+
+The UI lives in `src/` and is split into three layers, so the look and the agent wiring can change independently:
+
+1. **`src/lib/components/ui/`**: shadcn-svelte primitives (button, sidebar, sheet, tabs and so on), generated from `components.json` on the stock neutral theme.
+2. **`src/lib/components/chat/`**: chat building blocks with no eve code in them: `conversation` (scrolls with new content, stays put when you scroll up), `message`, `prompt-input`, `activity`, `decision`, `suggestions` and a working indicator. They compose like shadcn components, for example `<Message.Root from="user"><Message.Content>…`.
+3. **`src/lib/agent/`**: the eve wiring. `agent-chat.svelte` owns the `useEveAgent` session and maps its state onto the blocks above; `chats.svelte.ts` stores chats in `localStorage`; `format.ts` turns tool calls and stream events into readable text.
+
+A reply arrives as hundreds of small stream events, so the UI is built to do little work per event:
+
+- `AgentView` (`agent-view.svelte.ts`) copies the agent's state at most once per animation frame, so a burst of events costs one update. Status changes, like a reply finishing, still apply at once.
+- Stream stats (token usage, call timings) are kept up to date by reading each new event once, not by re-reading the whole stream.
+- Each message is its own component, and finished messages stop following the live stream, so only the reply being written re-renders.
+- Streaming markdown renders one paragraph at a time: finished paragraphs are parsed once and left alone.
+- Chats are saved every few seconds while a reply streams, when the browser is idle, and at once when a turn ends or you leave the page.
+
+To add a shadcn-svelte component, remove the `"extends": "$app/tsconfig"` line from `tsconfig.json` while running `npx shadcn-svelte@latest add <name>` (the CLI can't resolve it), then put it back.
 
 ## Keeping it cheap
 
@@ -138,19 +169,28 @@ agent/
   lib/                   profile, resume reader, job store, browser client,
                          search and screening helpers,
                          sources/ (one module per job source)
+src/                     SvelteKit chat UI; vite.config.ts mounts the agent on the same
+                         origin with eveSvelteKit()
+  lib/components/ui/     shadcn-svelte primitives (generated from components.json)
+  lib/components/chat/   chat building blocks with no eve code: conversation, message,
+                         prompt-input, activity, decision, suggestions
+  lib/agent/             eve wiring: maps the agent's state onto those blocks, and the
+                         saved-chats store
+  routes/[[id]]/         the chat page: / for a new chat, /<id> for a saved one
 browser-service/         Python service wrapping browser-use (server.py, tests/)
 scripts/browser.ps1      starts Chrome and the browser service
 data/                    companies.json, profile.example.json, your profile and resume
-tests/                   Vitest tests for the agent
+tests/                   Vitest tests for the agent and the UI's stream helpers
 ```
 
 ## Tests
 
 ```bash
-npm test               # agent tests (Vitest)
+npm test               # agent and UI helper tests (Vitest)
 npm run test:browser   # browser service tests (pytest)
 npm run test:all       # both
 npm run typecheck      # tsc, which also covers the tests
+npm run check          # svelte-check for the web UI
 ```
 
 The tests use fake data and never call Gemini, open Chrome, or touch your real profile. They don't cover real model behaviour or real job sites, so try a real run after changing the instructions or the browser service.
