@@ -150,7 +150,9 @@ def build_agent(job: Job, req: RunRequest, files: list[str]) -> Agent:
                 job.agent.stop()  # honoured before the actions run
                 return
 
-    task = f"{req.task}\n\nFiles you may upload (use these exact paths): {files or 'none'}"
+    # One path per line, exactly as the whitelist holds it (a list repr would double the backslashes).
+    listed = "\n".join(files) if files else "none"
+    task = f"{req.task}\n\nFiles you may upload (use these exact paths):\n{listed}"
     rules = RULES.format(submit_rule=DO_SUBMIT if req.allow_submit else NO_SUBMIT)
     api = dict(api_key=API_KEY)
     return Agent(
