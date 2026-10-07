@@ -1,0 +1,147 @@
+{
+  "name": "Janardhan Polle",
+  "headline": "Full Stack Developer · AI/ML Tooling",
+  "contact": {
+    "email": "janardhanpolle26@gmail.com",
+    "phone": "+91 84598 52864",
+    "location": "Aldona, Goa, India",
+    "github": "https://github.com/Jpisnice",
+    "linkedin": "https://linkedin.com/in/janardhan-polle-4b0b4a158"
+  },
+  "summary": "Full-stack developer who ships production-grade AI developer tooling, including an open-source MCP server with 3,000+ GitHub stars in active use across the AI coding-assistant ecosystem. Comfortable across the stack (Next.js, Node.js, Rust, Python) and increasingly focused on the intersection of web engineering and applied AI/ML: agent memory systems, LLM fine-tuning, and Model Context Protocol tooling. Adaptable, detail-oriented, and quick to pick up new stacks to ship real, used software.",
+  "strengths": [
+    "Ships open-source tools people actually adopt (3k+ GitHub stars)",
+    "Fluent across TypeScript, Rust, Python, and Go",
+    "Fast, self-directed learner; adapts to new stacks quickly"
+  ],
+  "skills": {
+    "languages": ["TypeScript", "Rust", "Python", "Go"],
+    "frontend": ["React", "Next.js", "Svelte 5", "Vue", "React Native"],
+    "backend": ["Node.js", "Bun", "Elysia", "OAuth", "JWT", "SSE"],
+    "data_infra": ["PostgreSQL", "MySQL", "Redis", "Docker", "Google Cloud Storage", "GitHub API"],
+    "ai_ml": ["Model Context Protocol (MCP)", "LLM fine-tuning", "Agent memory systems", "Naive Bayes classification"]
+  },
+  "experience": [
+    {
+      "title": "Application Developer",
+      "company": "Isymply",
+      "start": "2025-08",
+      "end": null,
+      "current": true,
+      "highlights": [
+        "Developed complex, data-dense grid UIs with filtering, sorting, inline editing, and undo/redo, plus other niche features required for effective data management in a web application."
+      ]
+    },
+    {
+      "title": "Full Stack Development Intern",
+      "company": "Codanto",
+      "start": "2024-07",
+      "end": "2024-08",
+      "current": false,
+      "highlights": [
+        "Developed and deployed multiple web applications end-to-end, focusing on full-stack development with Next.js, Node.js, and related web technologies."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Shadcn UI MCP Server",
+      "url": "https://github.com/Jpisnice/shadcn-ui-mcp-server",
+      "metrics": "3,000+ stars, 300+ forks on GitHub",
+      "tech": ["TypeScript", "MCP", "GitHub API", "SSE", "Docker", "npm"],
+      "highlights": [
+        "Built a Model Context Protocol (MCP) server giving AI coding assistants comprehensive programmatic access to shadcn/ui v4 components, demos, blocks, and metadata across React, Svelte 5, Vue, and React Native.",
+        "Engineered real-time component source retrieval, intelligent GitHub API caching with rate-limit handling, SSE transport for multi-client deployments, and Docker-based production deployment.",
+        "Published as an open-source npm CLI (npx-installable) with a one-click .mcpb installer for Claude Desktop; now used widely enough to rank among the most-starred MCP servers in its category."
+      ]
+    },
+    {
+      "name": "PolygenS Melody Generation Platform",
+      "url": "https://github.com/Jpisnice",
+      "tech": ["React", "Next.js", "TypeScript", "Elysia", "Bun", "OAuth", "JWT", "Google Cloud Storage"],
+      "highlights": [
+        "Developed a React/Next.js frontend with interactive Piano Roll and Note Grid interfaces for real-time musical parameter editing.",
+        "Engineered a high-performance TypeScript backend on Elysia/Bun for orchestration and API management, with OAuth/JWT auth and Google Cloud Storage integration via pre-signed URLs."
+      ]
+    },
+    {
+      "name": "db-manager",
+      "url": "https://github.com/Jpisnice/db-manager",
+      "tech": ["Rust", "Docker"],
+      "highlights": [
+        "Built a Rust-based terminal UI tool that orchestrates database containers via Docker, letting developers create, manage, and connect to PostgreSQL, MySQL, and Redis instances from a single interface."
+      ]
+    },
+    {
+      "name": "spamfilter",
+      "url": "https://github.com/Jpisnice/spamfilter",
+      "tech": ["Go"],
+      "highlights": ["Probabilistic (Naive Bayes) email spam classifier written in Go."]
+    },
+    {
+      "name": "FinetuneGemma3n",
+      "url": "https://github.com/Jpisnice/FinetuneGemma3n",
+      "tech": ["Python"],
+      "highlights": ["Fine-tuned Google's Gemma 3n model on the FineTome-100k dataset."]
+    }
+  ],
+  "education": [
+    {
+      "degree": "BE, Information Technology",
+      "institution": "Goa College of Engineering, Farmagudi",
+      "start": 2021,
+      "end": 2025,
+      "score": "CGPA 7.6"
+    },
+    {
+      "degree": "HSSC",
+      "institution": "Purushottom Walawalkar (Saraswat) HSSC, Mapusa",
+      "start": 2019,
+      "end": 2021,
+      "score": "60%"
+    },
+    {
+      "degree": "SSC",
+      "institution": "Mae de Deus High School, Aldona",
+      "start": 2018,
+      "end": 2019,
+      "score": "82%"
+    }
+  ],
+  "certifications": [
+    { "name": "The Joy of Computing Using Python", "issuer": "National Programme on Technology Enhanced Learning" },
+    { "name": "Generative AI for Everyone", "issuer": "DeepLearning.AI" },
+    { "name": "Google AI-ML Virtual Internship", "issuer": "All India Council for Technical Education (AICTE)" }
+  ],
+  "preferences": {
+    "seniority": "mid",
+    "targetRoles": [
+      "Full Stack Developer",
+      "Software Engineer",
+      "AI/ML Tooling Engineer",
+      "Applied AI Engineer"
+    ],
+    "keywords": [
+      "TypeScript", "Next.js", "React", "Node.js", "Rust", "Python", "Go",
+      "MCP", "Model Context Protocol", "LLM", "AI agents", "developer tools"
+    ],
+    "locations": {
+      "India": { "workMode": ["remote"], "required": true, "minSalaryINR": 1000000 },
+      "abroad": {
+        "regions": ["US", "UK", "UAE", "Europe"],
+        "workMode": ["remote", "onsite"],
+        "preferred": "remote",
+        "minSalaryINR": 1400000
+      }
+    },
+    "remoteOk": true,
+    "dealbreakers": [],
+    "minScore": 70,
+    "notes": "Salary floors are annual, in INR (convert foreign-currency offers). India roles must be remote; abroad roles may be remote or on-site, remote preferred. targetRoles and keywords were inferred from the resume and can be edited."
+  },
+  "answers": {
+    "noticePeriod": "30 days",
+    "workAuthorization": "Authorized to work (confirm country/visa details per application)",
+    "currentLocation": "Aldona, Goa, India"
+  }
+}

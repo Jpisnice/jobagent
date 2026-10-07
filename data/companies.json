@@ -1,0 +1,19 @@
+{
+  "greenhouse": [
+    "vercel", "stripe", "airbnb", "discord", "figma", "databricks", "anthropic", "elastic", "gitlab",
+    "cloudflare", "datadog", "mongodb", "netlify", "twilio", "coinbase", "brex", "asana", "webflow",
+    "grafanalabs", "airtable", "gusto", "dropbox", "reddit", "pinterest", "lyft", "instacart",
+    "robinhood", "okta", "samsara", "scaleai", "cockroachlabs", "mixpanel", "intercom", "carta",
+    "groww", "druva", "sumologic"
+  ],
+  "lever": ["palantir", "spotify", "cred", "meesho", "paytm", "zeta", "outreach"],
+  "ashby": [
+    "ramp", "openai", "notion", "linear", "supabase", "replit", "posthog", "cohere", "elevenlabs",
+    "zapier", "modal", "runway", "harvey", "benchling", "cursor", "langchain", "pinecone", "temporal",
+    "resend", "render", "neon", "clerk", "airbyte", "hex", "vanta", "mintlify", "perplexity",
+    "anyscale", "baseten", "weaviate", "livekit"
+  ],
+  "workable": ["huggingface"],
+  "smartrecruiters": ["Wise", "Canva", "Freshworks", "ServiceNow"],
+  "recruitee": ["bunq"]
+}
