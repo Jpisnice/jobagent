@@ -1,6 +1,101 @@
-# jobagent
+<p align="center">
+  <img src="docs/logo.svg" width="88" height="88" alt="jobagent logo">
+</p>
+
+<h1 align="center">jobagent</h1>
+
+<p align="center">
+  <strong>An AI job hunter that finds, screens and applies, and never presses Submit without you.</strong>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/node-24-339933?logo=nodedotjs&logoColor=white" alt="Node 24">
+  <img src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/SvelteKit-Svelte%205-FF3E00?logo=svelte&logoColor=white" alt="SvelteKit with Svelte 5">
+  <img src="https://img.shields.io/badge/UI-shadcn--svelte-000000" alt="shadcn-svelte">
+  <a href="https://eve.dev"><img src="https://img.shields.io/badge/agent-eve-111111" alt="Built with eve"></a>
+  <img src="https://img.shields.io/badge/model-Gemini-8E75B2?logo=googlegemini&logoColor=white" alt="Gemini">
+</p>
+
+<p align="center">
+  <a href="#highlights">Highlights</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#safety-rules-built-in">Safety</a> ·
+  <a href="#setup">Setup</a> ·
+  <a href="#project-layout">Project layout</a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/matches.png" alt="The jobagent chat showing screened job matches ranked by fit score" width="900">
+</p>
 
 An [eve](https://eve.dev) agent that finds jobs matching your profile, checks each one for fit, drafts your application, asks you before anything is sent, and emails you the results. It fills in application forms in your own Chrome window, so you can sign in or solve a CAPTCHA yourself and let the agent carry on. You talk to it in a local web chat, where you watch it work and answer its questions and approvals.
+
+## Highlights
+
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <h3>🔎 Searches 13 sources</h3>
+      Remote boards, Hacker News "Who is hiring" and the career pages of companies you pick. No API keys needed.
+    </td>
+    <td width="33%" valign="top">
+      <h3>🎯 Screens for fit</h3>
+      A small subagent scores every posting against your profile, in parallel, so only real matches reach you.
+    </td>
+    <td width="33%" valign="top">
+      <h3>✍️ Drafts applications</h3>
+      Each good match comes with a drafted application built only from your resume and your own answers.
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top">
+      <h3>🖱️ Fills forms in your Chrome</h3>
+      It works in your own browser window, uploads your resume, and hands over for logins and CAPTCHAs.
+    </td>
+    <td width="33%" valign="top">
+      <h3>✅ You approve every submit</h3>
+      Approving an application and pressing the final Submit are two separate approvals, enforced in code.
+    </td>
+    <td width="33%" valign="top">
+      <h3>📬 Daily digest</h3>
+      A schedule searches every morning and emails you the matches, each with its draft ready to go.
+    </td>
+  </tr>
+</table>
+
+## Quick start
+
+```bash
+npm install
+cp .env.example .env     # add GEMINI_API_KEY, RESEND_API_KEY, ALERT_FROM_EMAIL, BROWSER_SERVICE_TOKEN
+npm run dev              # chat UI + agent at http://localhost:5173
+```
+
+Open http://localhost:5173 and say hello. With no profile yet, the agent walks you through onboarding from your resume. See [Setup](#setup) for every option, and [Applying](#using-it) for the browser side.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/empty.png" alt="Empty chat with four starter suggestions"></td>
+    <td width="50%"><img src="docs/screenshots/working.png" alt="The agent working: a live indicator with a timer and a locked message box with a Stop button"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Start from a suggestion or ask anything</sub></td>
+    <td align="center"><sub>You always see what it's doing; Stop or Esc interrupts</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/matches.png" alt="Screened job matches ranked by score, with the tool activity folded into one line"></td>
+    <td width="50%"><img src="docs/screenshots/dark.png" alt="The same conversation in dark mode"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Matches ranked by fit, with the work folded into one line</sub></td>
+    <td align="center"><sub>Light, dark or follow the system</sub></td>
+  </tr>
+</table>
 
 ## What it does
 
@@ -11,34 +106,42 @@ An [eve](https://eve.dev) agent that finds jobs matching your profile, checks ea
 5. **History.** Ask in chat what it sent you this week, or which jobs you approved but haven't applied to yet.
 6. **Apply.** In a chat, you approve a job and the agent fills in the form in your Chrome window. It stops before the final Submit button, and pressing it needs a second approval from you.
 
-The agent never submits without your approval, never types passwords, and never tries to get past a login or CAPTCHA. When it hits one it stops and asks you to deal with it in the open Chrome window.
+> [!IMPORTANT]
+> The agent never submits without your approval, never types passwords, and never tries to get past a login or CAPTCHA. When it hits one, it stops and asks you to deal with it in the open Chrome window.
 
-## How it fits together
+## How it works
 
-```
- web chat UI (SvelteKit + shadcn-svelte)            npm run dev
-   |  /eve/v1 on the same origin: send, stream events, answer, cancel
-   v
- eve agent (TypeScript, Gemini)
-   |-- tools: profile, screen_jobs, alerts, job history, approvals
-   |     screen_jobs: search -> matcher batches in parallel -> record verdicts
-   |-- matcher subagent (no tools, one model call per batch, hard token cap)
-   |-- skills: onboarding and applying, loaded only when needed
-   |-- schedule: daily search + email digest
-   |
-   |  HTTP, 127.0.0.1 only, token protected
-   v
- browser service (Python, browser-use + Gemini)      npm run browser
-   |  Chrome DevTools protocol
-   v
- your Chrome window (its own profile, so logins persist)
+```mermaid
+flowchart TD
+    UI["💬 Web chat<br/>SvelteKit + shadcn-svelte"]
+    Agent["🧠 eve agent<br/>TypeScript + Gemini"]
+    Tools["Tools<br/>profile, screen_jobs, alerts,<br/>job history, approvals"]
+    Matcher["Matcher subagent<br/>one model call per batch"]
+    Skills["Skills<br/>onboarding, applying"]
+    Schedule["⏰ Daily schedule"]
+    Sources[("13 job sources")]
+    Resend["📬 Resend email"]
+    Service["Browser service<br/>Python + browser-use"]
+    Chrome["🌐 Your Chrome window<br/>its own profile"]
+
+    UI -- "/eve/v1 on the same origin" --> Agent
+    Schedule --> Agent
+    Agent --> Tools
+    Agent --> Skills
+    Tools -- "screen_jobs" --> Matcher
+    Tools --> Sources
+    Tools --> Resend
+    Tools -- "HTTP, 127.0.0.1 only, token" --> Service
+    Service -- "Chrome DevTools protocol" --> Chrome
 ```
 
 Everything runs on your machine. The only things that leave it are Gemini API calls, job-board requests, and the emails you send through Resend.
 
 **Job sources** (no keys needed): RemoteOK, Remotive, Himalayas, Arbeitnow, Jobicy, We Work Remotely, Hacker News "Who is hiring", plus Greenhouse, Lever, Ashby, Workable, SmartRecruiters and Recruitee for the companies listed in `data/companies.json`.
 
-## Requirements
+## Setup
+
+**Requirements**
 
 - Node 24 and npm
 - [uv](https://docs.astral.sh/uv/) (it fetches Python 3.12 for the browser service)
@@ -46,9 +149,8 @@ Everything runs on your machine. The only things that leave it are Gemini API ca
 - A [Gemini API key](https://aistudio.google.com/apikey) on a project with billing set up
 - A [Resend](https://resend.com) API key for email alerts
 
-The browser script (`npm run browser`) is PowerShell, so applying from the browser is Windows-only for now. Everything else is cross-platform.
-
-## Setup
+> [!NOTE]
+> The browser script (`npm run browser`) is PowerShell, so applying from the browser is Windows-only for now. Everything else is cross-platform.
 
 ```bash
 npm install
@@ -63,7 +165,8 @@ Set at least these in `.env`:
 | `RESEND_API_KEY`, `ALERT_FROM_EMAIL` | Sending alerts. With `onboarding@resend.dev` as the sender, Resend only delivers to the address you signed up with; verify a domain to send elsewhere. |
 | `BROWSER_SERVICE_TOKEN` | Any long random string. Stops other pages on your machine from calling the browser service. |
 
-Optional settings (defaults in brackets):
+<details>
+<summary><strong>Optional settings</strong> (defaults in brackets)</summary>
 
 | Variable | What it does |
 | --- | --- |
@@ -75,18 +178,21 @@ Optional settings (defaults in brackets):
 | `CHROME_PATH`, `CHROME_DEBUG_PORT`, `CHROME_PROFILE_DIR` | Chrome location, debug port, and profile folder [auto-detected, `9222`, `.chrome-profile`] |
 | `PROFILE_PATH`, `JOB_STORE_PATH`, `DATA_DIR` | Where the profile, seen-jobs list and resume folder live [`data/profile.json`, `.data/jobs.json`, `data/`] |
 
-The Gemini model names are `-preview` releases, which Google can change or retire. If one stops working, set the matching variable above.
+</details>
+
+> [!WARNING]
+> The Gemini model names are `-preview` releases, which Google can change or retire. If one stops working, set the matching variable above.
 
 ## Using it
 
-**First run: build your profile.** Start the web UI and the agent together, open http://localhost:5173, and say hello:
+### The chat
+
+Start the web UI and the agent together, open http://localhost:5173, and say hello:
 
 ```bash
 npm run dev          # SvelteKit chat UI + eve agent on one origin
 npm run dev:agent    # or: the agent alone, in eve's terminal UI
 ```
-
-In the chat:
 
 - Replies stream in as they're written. Tool calls fold into one activity line per step ("Checked your profile 31ms"); open it to see each call's input, output, error and duration, and the subagent's work inside its call.
 - While the agent works, the end of the thread says what it's doing with a running timer, and the browser tab reads "Working". The message box is locked until the reply ends; Stop (or Esc) interrupts it.
@@ -95,15 +201,21 @@ In the chat:
 - The sidebar keeps your chats on this device: rename, delete (with undo), and switch between them. Each chat has its own URL, and a chat left mid-reply picks up when you come back.
 - Session details (the button in the top right) show the session, model, token usage and cost, turns, tasks, a tool timeline, and the raw event stream.
 
-It will notice there is no profile and walk you through onboarding. To give it your resume as a file, copy it into `data/` (for example `data/resume.pdf`) and tell it the file name. The profile is saved to `data/profile.json`, which is git-ignored. `data/profile.example.json` shows the shape.
+### Your profile
 
-**Daily search.** The schedule `agent/schedules/job-search.ts` runs at 08:00 UTC. It checks the profile, searches, runs the fit check, and emails you a digest. `eve dev` never fires schedules, so to try one now:
+On the first run the agent notices there is no profile and walks you through onboarding. To give it your resume as a file, copy it into `data/` (for example `data/resume.pdf`) and tell it the file name. The profile is saved to `data/profile.json`, which is git-ignored. `data/profile.example.json` shows the shape.
+
+### Daily search
+
+The schedule `agent/schedules/job-search.ts` runs at 08:00 UTC. It checks the profile, searches, runs the fit check, and emails you a digest. `eve dev` never fires schedules, so to try one now:
 
 ```bash
 curl -X POST http://localhost:5173/eve/v1/dev/schedules/job-search   # or :2000 under npm run dev:agent
 ```
 
-**Applying.** In a chat, tell the agent which job to apply to. Before it can open a form, start the browser side in a second terminal and leave it running:
+### Applying
+
+In a chat, tell the agent which job to apply to. Before it can open a form, start the browser side in a second terminal and leave it running:
 
 ```bash
 npm run browser
@@ -118,6 +230,23 @@ This opens Chrome with its own profile and starts the browser service. Sign in t
 
 If it hits a login, account creation, CAPTCHA or verification code, it stops and asks you to handle it in the Chrome window, then continues from the same page when you say you are done. Applying never happens from the schedule, because a schedule can't ask you anything.
 
+## Safety rules built in
+
+- 🛑 Submitting needs your approval every time, enforced in code: the service blocks clicks on final-submit buttons unless the approved `browser_submit` tool started the run.
+- 🔑 Passwords are never typed by the agent, and CAPTCHAs are never attempted.
+- 📁 Resume uploads only work for files inside `data/`; links that lead outside it are refused.
+- 🔒 The browser service listens on `127.0.0.1` only and needs the token.
+- 📝 The agent uses only facts from your resume and your own answers, and is told never to invent experience.
+- 💸 Token caps limit each session, and the fit-check subagent has a very small budget, so a runaway loop can't run up a large bill.
+- 📧 Alert emails carry an idempotency key, so a retried step can't send the same email twice.
+
+## Keeping it cheap
+
+- `screen_jobs` keeps rejected postings out of the main model's context. The model only sees the jobs worth acting on, and it never has to copy postings into messages or record verdicts one call at a time.
+- The matcher gets the profile and the postings in one message, has no tools, and returns structured verdicts in a single model call per batch.
+- Onboarding and the browser-apply procedure are skills, so their instructions load only in the sessions that need them.
+- eve's default sandbox tools are turned off (`defaultTools: false`), so their schemas don't ride along on every call.
+
 ## How the web UI is built
 
 The UI lives in `src/` and is split into three layers, so the look and the agent wiring can change independently:
@@ -125,6 +254,9 @@ The UI lives in `src/` and is split into three layers, so the look and the agent
 1. **`src/lib/components/ui/`**: shadcn-svelte primitives (button, sidebar, sheet, tabs and so on), generated from `components.json` on the stock neutral theme.
 2. **`src/lib/components/chat/`**: chat building blocks with no eve code in them: `conversation` (scrolls with new content, stays put when you scroll up), `message`, `prompt-input`, `activity`, `decision`, `suggestions` and a working indicator. They compose like shadcn components, for example `<Message.Root from="user"><Message.Content>…`.
 3. **`src/lib/agent/`**: the eve wiring. `agent-chat.svelte` owns the `useEveAgent` session and maps its state onto the blocks above; `chats.svelte.ts` stores chats in `localStorage`; `format.ts` turns tool calls and stream events into readable text.
+
+<details>
+<summary><strong>Why it stays fast while streaming</strong></summary>
 
 A reply arrives as hundreds of small stream events, so the UI is built to do little work per event:
 
@@ -134,26 +266,15 @@ A reply arrives as hundreds of small stream events, so the UI is built to do lit
 - Streaming markdown renders one paragraph at a time: finished paragraphs are parsed once and left alone.
 - Chats are saved every few seconds while a reply streams, when the browser is idle, and at once when a turn ends or you leave the page.
 
-To add a shadcn-svelte component, remove the `"extends": "$app/tsconfig"` line from `tsconfig.json` while running `npx shadcn-svelte@latest add <name>` (the CLI can't resolve it), then put it back.
+</details>
 
-## Keeping it cheap
-
-- `screen_jobs` keeps rejected postings out of the main model's context. The model only sees the jobs worth acting on, and it never has to copy postings into messages or record verdicts one call at a time.
-- The matcher gets the profile and the postings in one message, has no tools, and returns structured verdicts in a single model call per batch.
-- Onboarding and the browser-apply procedure are skills, so their instructions load only in the sessions that need them.
-- eve's default sandbox tools are turned off (`defaultTools: false`), so their schemas don't ride along on every call.
-
-## Safety rules built in
-
-- Submitting needs your approval every time, enforced in code: the service blocks clicks on final-submit buttons unless the approved `browser_submit` tool started the run.
-- Passwords are never typed by the agent, and CAPTCHAs are never attempted.
-- Resume uploads only work for files inside `data/`; links that lead outside it are refused.
-- The browser service listens on `127.0.0.1` only and needs the token.
-- The agent uses only facts from your resume and your own answers, and is told never to invent experience.
-- Token caps limit each session, and the fit-check subagent has a very small budget, so a runaway loop can't run up a large bill.
-- Alert emails carry an idempotency key, so a retried step can't send the same email twice.
+> [!TIP]
+> To add a shadcn-svelte component, remove the `"extends": "$app/tsconfig"` line from `tsconfig.json` while running `npx shadcn-svelte@latest add <name>` (the CLI can't resolve it), then put it back.
 
 ## Project layout
+
+<details>
+<summary><strong>Show the tree</strong></summary>
 
 ```
 agent/
@@ -180,8 +301,11 @@ src/                     SvelteKit chat UI; vite.config.ts mounts the agent on t
 browser-service/         Python service wrapping browser-use (server.py, tests/)
 scripts/browser.ps1      starts Chrome and the browser service
 data/                    companies.json, profile.example.json, your profile and resume
+docs/                    logo and README screenshots
 tests/                   Vitest tests for the agent and the UI's stream helpers
 ```
+
+</details>
 
 ## Tests
 
@@ -199,12 +323,18 @@ The tests use fake data and never call Gemini, open Chrome, or touch your real p
 
 - **Local only.** The profile and seen-jobs list are plain files, and the browser runs on your machine. A Vercel deployment would need those moved to a database or blob store, and the browser part would not work there.
 - **Forms vary.** Standard forms and typeahead fields work in tests, but sites with unusual dropdowns, date pickers or multi-step wizards (Workday, for example) may need your help.
-- **LinkedIn and Indeed** prohibit automated access. The agent doesn't scrape them by default; if you point it there, keep the volume low and expect to risk your account.
 - **Cost.** Every application runs a browser-use loop on Gemini (typically a few to a dozen steps for a simple form, more for long ones). Set a spending cap in Google AI Studio.
 - **Channel auth.** `agent/channels/eve.ts` still uses eve's placeholder auth, which blocks browser requests in production. Replace it before you deploy.
+
+> [!CAUTION]
+> **LinkedIn and Indeed** prohibit automated access. The agent doesn't scrape them by default; if you point it there, keep the volume low and expect to risk your account.
 
 ## Learn more
 
 - [eve documentation](https://eve.dev/docs) and the [eve repository](https://github.com/vercel/eve)
 - [browser-use](https://github.com/browser-use/browser-use), which drives the browser
 - To deploy the agent part: `eve deploy` (see the [deployment guide](https://eve.dev/docs/guides/deployment/vercel) and the limitations above)
+
+## License
+
+[MIT](LICENSE) © 2026 Janardhan Polle
