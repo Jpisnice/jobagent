@@ -1,6 +1,7 @@
 {
   "name": "jobagent",
   "version": "0.0.0",
+  "license": "MIT",
   "type": "module",
   "imports": {
     "#lib": "./src/lib",
