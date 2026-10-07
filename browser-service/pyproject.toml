@@ -1,0 +1,13 @@
+[project]
+name = "jobagent-browser-service"
+version = "0.1.0"
+description = "Local browser-use service that drives a headed Chrome for the job agent"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "browser-use>=0.13.11",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+]
+
+[tool.uv]
+package = false

@@ -10,3 +10,5 @@ dist
 *.tsbuildinfo
 .data
 .chrome-profile
+browser-service/.venv
+__pycache__

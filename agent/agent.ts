@@ -13,8 +13,6 @@ export default defineAgent({
     thresholdPercent: 0.6,
     modelContextWindowTokens: CONTEXT_WINDOW,
   },
-  // playwright-core reads its own package.json at runtime, so it can't be bundled.
-  build: { externalDependencies: ["playwright-core"] },
   // Per-session safety caps, counted across all model calls in the session.
   limits: {
     maxInputTokensPerSession: 3_000_000,
