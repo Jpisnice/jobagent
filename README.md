@@ -83,7 +83,7 @@ npm run dev          # SvelteKit chat UI + eve agent on one origin
 npm run dev:agent    # or: the agent alone, in eve's terminal UI
 ```
 
-The chat UI streams the agent's replies and shows every tool call as a card with its input, output, error and duration. It also shows the subagent's work inside its call, and asks your questions and approvals above the message box. A details panel (the button in the top right) shows the session, model, token usage and cost, turns, tasks, a tool timeline, and the raw event stream. Enter during a running turn steers it, and Stop cancels it. The conversation survives a page reload.
+The chat UI streams the agent's replies and folds its tool calls into one activity line per step, which opens to show each call's input, output, error and duration, and the subagent's work inside its call. Questions and approvals appear in the thread as cards you answer with a click or a number key. Enter during a running turn steers it, and Stop cancels it. The sidebar keeps your chats on this device (rename, delete, and switch between them; a chat left mid-turn resumes when you come back). Session details (the button in the top right) show the session, model, token usage and cost, turns, tasks, a tool timeline, and the raw event stream.
 
 It will notice there is no profile and walk you through onboarding. To give it your resume as a file, copy it into `data/` (for example `data/resume.pdf`) and tell it the file name. The profile is saved to `data/profile.json`, which is git-ignored. `data/profile.example.json` shows the shape.
 
@@ -141,8 +141,13 @@ agent/
   lib/                   profile, resume reader, job store, browser client,
                          search and screening helpers,
                          sources/ (one module per job source)
-src/                     SvelteKit chat UI (routes/, lib/chat/ components); vite.config.ts
-                         mounts the agent on the same origin with eveSvelteKit()
+src/                     SvelteKit chat UI; vite.config.ts mounts the agent on the same
+                         origin with eveSvelteKit()
+  lib/components/ui/     shadcn-svelte primitives (generated from components.json)
+  lib/components/chat/   chat building blocks with no eve code: conversation, message,
+                         prompt-input, activity, decision, suggestions
+  lib/agent/             eve wiring: maps the agent's state onto those blocks, and the
+                         saved-chats store
 browser-service/         Python service wrapping browser-use (server.py, tests/)
 scripts/browser.ps1      starts Chrome and the browser service
 data/                    companies.json, profile.example.json, your profile and resume

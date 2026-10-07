@@ -15,5 +15,6 @@
     "vite.config.ts",
     "src"
   ],
-  "exclude": ["src/service-worker"]
+  // Generated shadcn-svelte barrels re-export from .svelte modules, which only svelte-check can read.
+  "exclude": ["src/service-worker", "src/lib/components/ui"]
 }
