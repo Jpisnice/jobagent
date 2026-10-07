@@ -1,15 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useProfile } from "./fixtures";
 import { freshStore, jsonResponse, parseInput, stubFetch, textResponse, toolCtx } from "./helpers";
 
 const runTask = vi.hoisted(() => vi.fn());
 vi.mock("../agent/lib/browser", () => ({ runTask }));
 
 let ctx: Awaited<ReturnType<typeof freshStore>>;
+let profile: ReturnType<typeof useProfile>;
 beforeEach(async () => {
   ctx = await freshStore();
+  profile = useProfile(); // a made-up, complete profile in a temp folder
   runTask.mockReset();
 });
-afterEach(() => ctx.cleanup());
+afterEach(() => {
+  ctx.cleanup();
+  profile.cleanup();
+});
 
 const load = async (name: string) => (await import(`../agent/tools/${name}.ts`)).default as any;
 const call = (tool: any, input: unknown, id = "call-1") => tool.execute(parseInput(tool, input), toolCtx(id));
@@ -21,33 +27,10 @@ async function expectAlwaysAsksUser(tool: any) {
 }
 const jobInput = { url: "https://jobs.example.com/1", title: "Engineer", company: "Acme" };
 
-describe("get_profile", () => {
-  it("returns the whole profile", async () => {
-    const out = await call(await load("get_profile"), {});
-    expect(out.name).toBe("Janardhan Polle");
-    expect(out.skills.languages).toContain("TypeScript");
-    expect(out.preferences.minScore).toBeGreaterThan(0);
-  });
-});
-
-describe("matcher's get_profile", () => {
-  it("returns a slim view without the resume text, contact details or answers", async () => {
-    const tool = (await import("../agent/subagents/matcher/tools/get_profile")).default as any;
-    const out = await call(tool, {});
-    expect(Object.keys(out).sort()).toEqual(["experience", "headline", "preferences", "projects", "skills"]);
-    const text = JSON.stringify(out);
-    expect(text).not.toContain("@gmail.com");
-    expect(text).not.toContain("84598");
-    expect(out.experience[0]).toMatch(/Isymply/);
-    expect(out.experience[0]).toMatch(/present/);
-  });
-});
-
+// get_profile, draft_application and the matcher's get_profile are tested in onboarding.test.ts.
 describe("draft_application", () => {
-  it("returns the job plus candidate facts and tells the model not to invent anything", async () => {
+  it("tells the model to use only the facts it was given", async () => {
     const out = await call(await load("draft_application"), { title: "Engineer", company: "Acme" });
-    expect(out.job).toMatchObject({ title: "Engineer", company: "Acme" });
-    expect(out.candidate.name).toBe("Janardhan Polle");
     expect(out.guidance).toMatch(/only/i);
   });
 });
@@ -119,12 +102,12 @@ describe("send_alert", () => {
     expect(JSON.parse(calls[1]!.init!.body as string).html).toBe("<h1>Hi</h1>");
   });
 
-  it("falls back to the resume email when ALERT_TO_EMAIL is not set", async () => {
+  it("falls back to the email on the profile when ALERT_TO_EMAIL is not set", async () => {
     vi.stubEnv("ALERT_TO_EMAIL", "");
     delete process.env.ALERT_TO_EMAIL;
     const { calls } = stubFetch({ "api.resend.com": { id: "x" } });
     await call(await load("send_alert"), { subject: "s", body: "b" });
-    expect(JSON.parse(calls[0]!.init!.body as string).to).toEqual(["janardhanpolle26@gmail.com"]);
+    expect(JSON.parse(calls[0]!.init!.body as string).to).toEqual(["test.candidate@example.com"]);
   });
 
   it("fails clearly without Resend settings and sends nothing", async () => {

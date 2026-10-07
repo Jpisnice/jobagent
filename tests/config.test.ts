@@ -1,8 +1,10 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import companies from "../data/companies.json";
-import profile from "../data/profile.json";
+import example from "../data/profile.example.json";
+import { assess, ProfileSchema } from "../agent/lib/profile";
 import { sources } from "../agent/lib/sources";
 
 const root = join(__dirname, "..");
@@ -38,59 +40,39 @@ describe("data/companies.json", () => {
   });
 });
 
-describe("data/profile.json", () => {
-  it("has the identity and contact fields applications need", () => {
-    expect(profile.name).toBeTruthy();
-    expect(profile.contact.email).toMatch(/^[^@\s]+@[^@\s]+\.[^@\s]+$/);
-    expect(profile.contact.phone.replace(/\D/g, "").length).toBeGreaterThanOrEqual(10);
-    expect(profile.contact.location).toBeTruthy();
+describe("data/profile.example.json", () => {
+  const parsed = ProfileSchema.parse(example);
+
+  it("is a valid, complete profile, so it documents every field the tools understand", () => {
+    expect(ProfileSchema.safeParse(example).success).toBe(true);
+    expect(assess(parsed)).toMatchObject({ complete: true, missing: [] });
   });
 
-  it("lists skills, experience, projects and education", () => {
-    expect(profile.skills.languages.length).toBeGreaterThan(0);
-    expect(profile.experience.length).toBeGreaterThan(0);
-    expect(profile.projects.length).toBeGreaterThan(0);
-    expect(profile.education.length).toBeGreaterThan(0);
+  it("shows well-formed experience with at most one current job", () => {
+    for (const e of parsed.experience) expect(e.current).toBe(e.end === null);
+    expect(parsed.experience.filter((e) => e.current).length).toBeLessThanOrEqual(1);
   });
 
-  it("has well-formed experience entries with at most one current job", () => {
-    for (const e of profile.experience) {
-      expect(e.start).toMatch(/^\d{4}-\d{2}$/);
-      expect(e.end === null || /^\d{4}-\d{2}$/.test(e.end as string)).toBe(true);
-      expect(e.current).toBe(e.end === null);
+  it("shows location rules with a work mode and an annual INR salary floor", () => {
+    for (const rule of Object.values(parsed.preferences.locations)) {
+      expect(rule.workMode.length).toBeGreaterThan(0);
+      expect(rule.minSalaryINR).toBeGreaterThan(0);
     }
-    expect(profile.experience.filter((e) => e.current).length).toBeLessThanOrEqual(1);
   });
 
-  it("encodes the job-search rules the matcher depends on", () => {
-    const p = profile.preferences;
-    expect(p.seniority).toBe("mid");
-    expect(p.minScore).toBeGreaterThanOrEqual(0);
-    expect(p.minScore).toBeLessThanOrEqual(100);
-    expect(p.locations.India.workMode).toEqual(["remote"]);
-    expect(p.locations.India.required).toBe(true);
-    expect(p.locations.India.minSalaryINR).toBe(1_000_000);
-    expect(p.locations.abroad.minSalaryINR).toBe(1_400_000);
-    expect(p.locations.abroad.regions).toEqual(expect.arrayContaining(["US", "UK", "UAE", "Europe"]));
-    expect(p.targetRoles.length).toBeGreaterThan(0);
-    expect(p.keywords.length).toBeGreaterThan(0);
-  });
-
-  it("has the standard application answers", () => {
-    expect(profile.answers.noticePeriod).toBe("30 days");
-    expect(profile.answers.workAuthorization).toBeTruthy();
+  it("holds no real personal data", () => {
+    const text = JSON.stringify(example);
+    expect(text).toContain("you@example.com");
+    expect(text).not.toMatch(/gmail\.com|\+91/);
   });
 });
 
-describe("alertEmail", () => {
-  it("defaults to the resume email and can be overridden", async () => {
-    vi.resetModules();
-    delete process.env.ALERT_TO_EMAIL;
-    const { alertEmail } = await import("../agent/lib/profile");
-    expect(alertEmail()).toBe(profile.contact.email);
-    vi.stubEnv("ALERT_TO_EMAIL", "other@example.com");
-    expect(alertEmail()).toBe("other@example.com");
-    vi.unstubAllEnvs();
+describe("the real profile, when there is one", () => {
+  const file = join(root, "data/profile.json");
+
+  it.skipIf(!existsSync(file))("data/profile.json still matches the schema", () => {
+    const result = ProfileSchema.safeParse(JSON.parse(readFileSync(file, "utf8")));
+    expect(result.error?.issues ?? []).toEqual([]);
   });
 });
 
@@ -101,6 +83,13 @@ describe("schedule", () => {
     expect(def.markdown).toMatch(/matcher/);
     expect(def.markdown).toMatch(/Do NOT submit/i);
     expect(def.markdown).toMatch(/fetch_jobs/);
+  });
+
+  it("checks the profile first and never tries to onboard, since a schedule cannot ask questions", async () => {
+    const def = (await import("../agent/schedules/job-search")).default as any;
+    expect(def.markdown.indexOf("profile_status")).toBeGreaterThanOrEqual(0);
+    expect(def.markdown.indexOf("profile_status")).toBeLessThan(def.markdown.indexOf("fetch_jobs"));
+    expect(def.markdown).toMatch(/missing or incomplete.*send_alert.*stop/s);
   });
 });
 
@@ -124,13 +113,29 @@ describe("agent settings", () => {
 });
 
 describe("tool definitions", () => {
-  const own = ["approve_application", "browser_submit", "browser_task", "draft_application", "fetch_jobs", "get_profile", "record_job", "send_alert"];
+  const own = [
+    "approve_application", "browser_submit", "browser_task", "draft_application", "fetch_jobs", "get_profile",
+    "profile_status", "read_resume", "record_job", "save_profile", "send_alert",
+  ];
+
+  // Gemini rejects free-form maps ("Unsupported type: OBJECT"), so inputs must use lists of entries instead.
+  it.each(own)("%s has an input schema without free-form maps", async (name) => {
+    const tool = (await import(`../agent/tools/${name}.ts`)).default as any;
+    const json = JSON.stringify(z.toJSONSchema(tool.inputSchema, { io: "input" }));
+    expect(json).not.toMatch(/"additionalProperties":\{/);
+    expect(json).not.toMatch(/"propertyNames"/);
+  });
 
   it.each(own)("%s has a description and an input schema", async (name) => {
     const tool = (await import(`../agent/tools/${name}.ts`)).default as any;
     expect(tool.description.length).toBeGreaterThan(30);
     expect(typeof tool.inputSchema.parse).toBe("function");
     expect(typeof tool.execute).toBe("function");
+  });
+
+  it("the free-form-map guard really detects a map", () => {
+    const json = JSON.stringify(z.toJSONSchema(z.object({ answers: z.record(z.string(), z.string()) }), { io: "input" }));
+    expect(json).toMatch(/"additionalProperties":\{|"propertyNames"/);
   });
 
   it("only the approval-gated tools can finish an application", async () => {
@@ -165,6 +170,22 @@ describe("instructions", () => {
     for (const t of ["matcher", "approve_application", "browser_task", "browser_submit", "fetch_jobs", "send_alert"]) {
       expect(instructions).toContain(`\`${t}\``);
     }
+  });
+
+  it("tells the agent to check the profile first and how to onboard a new user", () => {
+    const onboarding = instructions.slice(instructions.indexOf("# Profile onboarding"), instructions.indexOf("# Workflow"));
+    expect(onboarding.length).toBeGreaterThan(200);
+    for (const t of ["profile_status", "read_resume", "save_profile", "ask_question", "send_alert"]) {
+      expect(onboarding).toContain(`\`${t}\``);
+    }
+    expect(onboarding).toMatch(/FIRST/);
+    expect(onboarding).toMatch(/Scheduled runs cannot ask questions/);
+    expect(onboarding).toMatch(/Never invent/);
+  });
+
+  it("onboarding comes before the job workflow", () => {
+    expect(instructions.indexOf("# Profile onboarding")).toBeGreaterThan(0);
+    expect(instructions.indexOf("# Profile onboarding")).toBeLessThan(instructions.indexOf("# Workflow"));
   });
 
   it("keeps the safety rules", () => {
@@ -202,6 +223,8 @@ describe("no leftovers from removed setups", () => {
 
   it("secrets and local browser data stay out of git", () => {
     const ignore = read(".gitignore");
-    for (const entry of [".env", ".chrome-profile", ".data", "browser-service/.venv"]) expect(ignore).toContain(entry);
+    for (const entry of [".env", ".chrome-profile", ".data", "browser-service/.venv", "data/profile.json", "data/resume.*"]) {
+      expect(ignore).toContain(entry);
+    }
   });
 });

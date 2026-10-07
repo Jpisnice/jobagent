@@ -1,0 +1,57 @@
+{
+  "name": "Your Name",
+  "headline": "Full Stack Developer",
+  "contact": {
+    "email": "you@example.com",
+    "phone": "+00 00000 00000",
+    "location": "City, Country",
+    "github": "https://github.com/your-handle",
+    "linkedin": "https://linkedin.com/in/your-handle"
+  },
+  "summary": "Two or three sentences about what you do, what you have built and what you are looking for.",
+  "strengths": ["One line about something you do well"],
+  "skills": {
+    "languages": ["TypeScript", "Python"],
+    "frontend": ["React", "Next.js"],
+    "backend": ["Node.js"]
+  },
+  "experience": [
+    {
+      "title": "Software Engineer",
+      "company": "Example Co",
+      "start": "2024-01",
+      "end": null,
+      "current": true,
+      "highlights": ["What you built or improved, with a number if you have one"]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Example Project",
+      "url": "https://github.com/your-handle/example",
+      "tech": ["TypeScript"],
+      "highlights": ["What it does and who uses it"]
+    }
+  ],
+  "education": [
+    { "degree": "BE, Computer Science", "institution": "Example University", "start": 2020, "end": 2024, "score": "CGPA 8.0" }
+  ],
+  "certifications": [{ "name": "Example Certificate", "issuer": "Example Issuer" }],
+  "preferences": {
+    "seniority": "mid",
+    "targetRoles": ["Full Stack Developer"],
+    "keywords": ["TypeScript", "React", "Node.js"],
+    "locations": {
+      "Home country": { "workMode": ["remote"], "required": true, "minSalaryINR": 1000000 },
+      "abroad": { "regions": ["US", "UK", "Europe"], "workMode": ["remote", "onsite"], "preferred": "remote", "minSalaryINR": 1400000 }
+    },
+    "remoteOk": true,
+    "dealbreakers": [],
+    "minScore": 70,
+    "notes": "Salary floors are annual, in INR."
+  },
+  "answers": {
+    "noticePeriod": "30 days",
+    "workAuthorization": "Authorized to work in my country; needs sponsorship elsewhere"
+  }
+}

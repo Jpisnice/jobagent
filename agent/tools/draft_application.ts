@@ -1,6 +1,6 @@
-﻿import { defineTool } from "eve/tools";
+import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { profile } from "../lib/profile";
+import { requireProfile } from "../lib/profile";
 
 export default defineTool({
   description:
@@ -9,7 +9,7 @@ export default defineTool({
   async execute(input) {
     return {
       job: input,
-      candidate: profile,
+      candidate: await requireProfile(),
       guidance: "Write a short tailored cover letter and answers to likely form questions using only the facts above.",
     };
   },

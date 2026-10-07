@@ -1,5 +1,6 @@
 node_modules
 .env*
+!.env.example
 .eve
 .vercel
 .next
@@ -12,3 +13,8 @@ dist
 .chrome-profile
 browser-service/.venv
 __pycache__
+
+# Personal data written by the onboarding tools; never commit
+data/profile.json
+data/profile.json.tmp
+data/resume.*

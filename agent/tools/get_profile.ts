@@ -1,11 +1,12 @@
-﻿import { defineTool } from "eve/tools";
+import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { profile } from "../lib/profile";
+import { requireProfile } from "../lib/profile";
 
 export default defineTool({
-  description: "Return the candidate's job profile: resume, target roles, locations, salary floor, dealbreakers, minScore and standard answers.",
+  description:
+    "Return the candidate's job profile: contact details, skills, experience, projects, education, target roles, location rules, dealbreakers, minScore and standard answers. Fails with instructions if there is no profile yet; run profile onboarding then.",
   inputSchema: z.object({}),
   async execute() {
-    return profile;
+    return requireProfile();
   },
 });

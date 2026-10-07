@@ -23,10 +23,13 @@
     "@vercel/connect": "2.2.0",
     "ai": "^7.0.128",
     "eve": "^0.72.1",
+    "mammoth": "^1.13.0",
+    "unpdf": "^1.8.1",
     "zod": "4.5.4"
   },
   "devDependencies": {
     "@types/node": "24.x",
+    "jszip": "^3.10.2",
     "just-bash": "^3.6.0",
     "typescript": "7.0.2",
     "vitest": "^5.0.3"
