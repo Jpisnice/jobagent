@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="96" height="96" role="img" aria-label="jobagent logo">
+  <rect width="32" height="32" rx="8" fill="#171717"/>
+  <path d="M10 10h12M10 15h12M10 20h7" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="22" cy="21.5" r="3" fill="#f59e0b"/>
+</svg>
