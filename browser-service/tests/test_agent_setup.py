@@ -95,6 +95,27 @@ class TestAgentConfig:
         assert "You may now press the final Submit button once" in kw["extend_system_message"]
         assert "Do NOT press the final Submit" not in kw["extend_system_message"]
 
+    def test_checks_its_own_actions_instead_of_flash_mode(self, built):
+        kw, _ = built()
+        assert kw["flash_mode"] is False
+        assert kw["use_thinking"] is False
+
+    def test_model_sees_selection_state_of_custom_buttons(self, built):
+        kw, _ = built()
+        for attr in ("checked", "aria-checked", "aria-pressed", "aria-selected", "aria-haspopup"):
+            assert attr in kw["include_attributes"]
+
+    def test_form_actions_are_registered(self, built):
+        kw, _ = built()
+        actions = kw["tools"].registry.registry.actions
+        assert "choose_option" in actions and "choose_choice" in actions
+
+    def test_prompt_routes_dropdowns_and_choices_to_the_form_actions(self, built):
+        kw, _ = built()
+        rules = kw["extend_system_message"]
+        assert "choose_option" in rules and "choose_choice" in rules
+        assert "Never click a choice twice" in rules
+
     def test_prompt_never_lets_the_agent_type_passwords(self, built):
         kw, _ = built()
         assert "password" in kw["extend_system_message"].lower()
@@ -129,6 +150,13 @@ class TestSubmitGate:
         kw, job = built()
         nodes = {1: FakeNode("Phone"), 9: FakeNode("Submit application")}
         step(kw, nodes, action("input", index=1, text="123"), action("click", index=9))
+        assert job.blocked_submit == "Submit application"
+        assert job.agent.stopped is True
+
+    @pytest.mark.parametrize("name", ["choose_option", "choose_choice"])
+    def test_form_actions_on_the_submit_button_are_blocked(self, built, name):
+        kw, job = built()
+        step(kw, {7: FakeNode("Submit application")}, action(name, index=7, value="Yes"))
         assert job.blocked_submit == "Submit application"
         assert job.agent.stopped is True
 

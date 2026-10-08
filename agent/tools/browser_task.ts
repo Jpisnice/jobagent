@@ -10,7 +10,7 @@ export default defineTool({
       .string()
       .min(20)
       .describe(
-        "Full instructions: the job URL (or 'continue on the current page'), then every field and the exact value to enter, plus any questions and the answers to give",
+        "Full instructions: the job URL (or 'continue on the current page'), then one 'Field label: value' line per field, including every dropdown and Yes/No or multiple-choice question with the answer as the option would read (for example 'Country: United States', 'Will you require sponsorship?: No')",
       ),
     files: z
       .array(z.string())
