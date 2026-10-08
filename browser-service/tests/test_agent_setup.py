@@ -95,10 +95,16 @@ class TestAgentConfig:
         assert "You may now press the final Submit button once" in kw["extend_system_message"]
         assert "Do NOT press the final Submit" not in kw["extend_system_message"]
 
-    def test_checks_its_own_actions_instead_of_flash_mode(self, built):
+    def test_checks_its_own_actions_instead_of_flash_mode(self, built, monkeypatch):
+        monkeypatch.setattr(server, "FLASH", False)
         kw, _ = built()
         assert kw["flash_mode"] is False
         assert kw["use_thinking"] is False
+
+    def test_flash_mode_can_be_turned_back_on(self, built, monkeypatch):
+        monkeypatch.setattr(server, "FLASH", True)
+        kw, _ = built()
+        assert kw["flash_mode"] is True
 
     def test_model_sees_selection_state_of_custom_buttons(self, built):
         kw, _ = built()
@@ -109,6 +115,12 @@ class TestAgentConfig:
         kw, _ = built()
         actions = kw["tools"].registry.registry.actions
         assert "choose_option" in actions and "choose_choice" in actions
+
+    def test_form_actions_end_the_step_so_later_indexes_are_not_stale(self, built):
+        kw, _ = built()
+        actions = kw["tools"].registry.registry.actions
+        assert actions["choose_option"].terminates_sequence is True
+        assert actions["choose_choice"].terminates_sequence is True
 
     def test_prompt_routes_dropdowns_and_choices_to_the_form_actions(self, built):
         kw, _ = built()

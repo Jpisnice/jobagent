@@ -62,6 +62,16 @@ FINAL_SUBMIT = re.compile(
     r"|finish application|confirm and submit",
     re.I,
 )
+# Actions that click the element at `index`. The form actions click too, so they are gated the same way.
+INDEX_CLICKS = ("click", "click_element_by_index", "choose_option", "choose_choice")
+
+
+def is_final_submit(label: str, btn_type: str = "") -> bool:
+    """Would clicking this send the application?"""
+    return bool(label) and bool(
+        FINAL_SUBMIT.search(label) or (btn_type.lower() == "submit" and re.search(r"submit|send", label, re.I))
+    )
+
 
 RULES = """
 You are filling in a job application in the user's own Chrome window. Rules:
@@ -80,8 +90,6 @@ You are filling in a job application in the user's own Chrome window. Rules:
   clicking one again, check checked / aria-checked / aria-pressed / aria-selected and the screenshot.
 - If choose_option or choose_choice fails twice on a field, fall back to dropdown_options and
   select_dropdown, then to clicking the field open and clicking the option by hand.
-- Do a dropdown or choice action as the last action in its step: opening a popup changes the page, so
-  the element indexes after it are stale.
 - To upload a file, use the upload_file action with the exact absolute path given in the task.
 - After filling, go through every field in the task and check the value the page shows now (scroll
   through the whole form). Redo any field that is empty or wrong, then stop. {submit_rule}
@@ -92,8 +100,7 @@ NO_SUBMIT = (
     "Do NOT press the final Submit / Send application button. Stop on the review or submit step "
     "and report that the form is ready."
 )
-INDEX_CLICKS = ("click", "click_element_by_index", "choose_option", "choose_choice")
-DO_SUBMIT ="You may now press the final Submit button once, then report the confirmation message."
+DO_SUBMIT = "You may now press the final Submit button once, then report the confirmation message."
 
 
 class RunRequest(BaseModel):
@@ -161,7 +168,8 @@ def build_agent(job: Job, req: RunRequest, files: list[str]) -> Agent:
         job.needs_human = reason
         return ActionResult(is_done=True, success=False, extracted_content=f"Needs human: {reason}")
 
-    form_actions.register(tools, is_final_submit=lambda text: not req.allow_submit and bool(FINAL_SUBMIT.search(text)))
+    # The form actions never press Submit, even once it is approved: that stays a plain click.
+    form_actions.register(tools, is_final_submit=is_final_submit)
 
     async def on_step(state, output, step) -> None:
         """Runs after the model picked its actions and before they execute."""
@@ -171,13 +179,12 @@ def build_agent(job: Job, req: RunRequest, files: list[str]) -> Agent:
         selector_map = getattr(getattr(state, "dom_state", None), "selector_map", {}) or {}
         for action in output.action:
             data = action.model_dump(exclude_unset=True)
-            # The form actions click too, so their target is checked like a click.
             click = next((data[k] for k in INDEX_CLICKS if isinstance(data.get(k), dict)), None)
             index = click.get("index") if click else None
             node = selector_map.get(index) if index is not None else None
             label = node_label(node) if node is not None else ""
-            btn_type = str((getattr(node, "attributes", None) or {}).get("type", "")).lower()
-            if label and (FINAL_SUBMIT.search(label) or (btn_type == "submit" and re.search(r"submit|send", label, re.I))):
+            btn_type = str((getattr(node, "attributes", None) or {}).get("type", ""))
+            if is_final_submit(label, btn_type):
                 job.blocked_submit = label
                 job.agent.stop()  # honoured before the actions run
                 return

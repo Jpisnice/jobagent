@@ -110,3 +110,20 @@ class TestFinalSubmitPattern:
     )
     def test_does_not_match_buttons_that_only_move_the_flow_along(self, label):
         assert not server.FINAL_SUBMIT.search(label)
+
+
+class TestIsFinalSubmit:
+    def test_a_submit_type_button_that_mentions_submit(self):
+        assert server.is_final_submit("Review and submit", "submit")
+
+    def test_type_is_case_insensitive(self):
+        assert server.is_final_submit("Review and submit", "SUBMIT")
+
+    def test_the_label_pattern_alone_is_enough(self):
+        assert server.is_final_submit("Submit application", "button")
+
+    def test_a_submit_type_button_that_only_moves_on(self):
+        assert not server.is_final_submit("Next", "submit")
+
+    def test_empty_label_never_counts(self):
+        assert not server.is_final_submit("", "submit")
