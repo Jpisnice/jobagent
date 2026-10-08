@@ -30,11 +30,29 @@ load_dotenv(ROOT / ".env")
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
 
 from browser_use import ActionResult, Agent, Browser, ChatGoogle, Tools  # noqa: E402
+from browser_use.dom.views import DEFAULT_INCLUDE_ATTRIBUTES  # noqa: E402
+
+import form_actions  # noqa: E402
 
 DATA_DIR = (ROOT / "data").resolve()
 CDP_URL = os.getenv("BROWSER_CDP_URL", "http://127.0.0.1:9222")
 MODEL = os.getenv("BROWSER_USE_MODEL", "gemini-3-flash-preview")
 FALLBACK_MODEL = os.getenv("BROWSER_USE_FALLBACK_MODEL", "gemini-2.5-flash")
+# Flash mode skips the "did my last action work?" evaluation, which is what catches a dropdown or
+# Yes/No button that did not take. Off unless you want speed over accuracy.
+FLASH = os.getenv("BROWSER_USE_FLASH", "").lower() in ("1", "true", "yes")
+# Extra attributes the model sees, so it can tell which pill/listbox option is selected.
+INCLUDE_ATTRIBUTES = DEFAULT_INCLUDE_ATTRIBUTES + [
+    "aria-pressed",
+    "aria-selected",
+    "aria-haspopup",
+    "aria-controls",
+    "aria-required",
+    "required",
+    "data-selected",
+    "data-checked",
+    "selected",
+]
 API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 TOKEN = os.getenv("BROWSER_SERVICE_TOKEN")
 
@@ -44,6 +62,16 @@ FINAL_SUBMIT = re.compile(
     r"|finish application|confirm and submit",
     re.I,
 )
+# Actions that click the element at `index`. The form actions click too, so they are gated the same way.
+INDEX_CLICKS = ("click", "click_element_by_index", "choose_option", "choose_choice")
+
+
+def is_final_submit(label: str, btn_type: str = "") -> bool:
+    """Would clicking this send the application?"""
+    return bool(label) and bool(
+        FINAL_SUBMIT.search(label) or (btn_type.lower() == "submit" and re.search(r"submit|send", label, re.I))
+    )
+
 
 RULES = """
 You are filling in a job application in the user's own Chrome window. Rules:
@@ -53,10 +81,18 @@ You are filling in a job application in the user's own Chrome window. Rules:
   account creation, a CAPTCHA, a verification code or anything else you cannot do, call the
   ask_human action with a clear reason and stop. The user will fix it in the window and you will be
   run again from the same page.
-- Dropdowns and comboboxes: click the field, type part of the value, wait for the options, then click
-  the matching option. Verify the field shows the value afterwards.
+- Dropdowns (<select>, role=combobox, aria-haspopup=listbox, searchable/autocomplete selects, anything
+  with a dropdown arrow): use choose_option(index, value). If it returns the list of options instead,
+  call it again with the option that means the same as the given value. If none means the same, leave
+  the field and report it. Never pick an unrelated option just to fill the field.
+- Radio buttons, checkboxes, Yes/No buttons and pill/segmented buttons: use choose_choice(index, value)
+  with any choice in the group. Never click a choice twice: a second click can turn it off. Before
+  clicking one again, check checked / aria-checked / aria-pressed / aria-selected and the screenshot.
+- If choose_option or choose_choice fails twice on a field, fall back to dropdown_options and
+  select_dropdown, then to clicking the field open and clicking the option by hand.
 - To upload a file, use the upload_file action with the exact absolute path given in the task.
-- After filling, re-read the form and check every field, then stop. {submit_rule}
+- After filling, go through every field in the task and check the value the page shows now (scroll
+  through the whole form). Redo any field that is empty or wrong, then stop. {submit_rule}
 - In your final result, list each field you filled, anything you could not fill, and the current page.
 """
 
@@ -132,6 +168,9 @@ def build_agent(job: Job, req: RunRequest, files: list[str]) -> Agent:
         job.needs_human = reason
         return ActionResult(is_done=True, success=False, extracted_content=f"Needs human: {reason}")
 
+    # The form actions never press Submit, even once it is approved: that stays a plain click.
+    form_actions.register(tools, is_final_submit=is_final_submit)
+
     async def on_step(state, output, step) -> None:
         """Runs after the model picked its actions and before they execute."""
         job.steps = step
@@ -140,12 +179,12 @@ def build_agent(job: Job, req: RunRequest, files: list[str]) -> Agent:
         selector_map = getattr(getattr(state, "dom_state", None), "selector_map", {}) or {}
         for action in output.action:
             data = action.model_dump(exclude_unset=True)
-            click = data.get("click") or data.get("click_element_by_index")
-            index = click.get("index") if isinstance(click, dict) else None
+            click = next((data[k] for k in INDEX_CLICKS if isinstance(data.get(k), dict)), None)
+            index = click.get("index") if click else None
             node = selector_map.get(index) if index is not None else None
             label = node_label(node) if node is not None else ""
-            btn_type = str((getattr(node, "attributes", None) or {}).get("type", "")).lower()
-            if label and (FINAL_SUBMIT.search(label) or (btn_type == "submit" and re.search(r"submit|send", label, re.I))):
+            btn_type = str((getattr(node, "attributes", None) or {}).get("type", ""))
+            if is_final_submit(label, btn_type):
                 job.blocked_submit = label
                 job.agent.stop()  # honoured before the actions run
                 return
@@ -165,7 +204,10 @@ def build_agent(job: Job, req: RunRequest, files: list[str]) -> Agent:
         extend_system_message=rules,
         register_new_step_callback=on_step,
         use_vision=True,
-        flash_mode=True,
+        vision_detail_level="high",
+        include_attributes=INCLUDE_ATTRIBUTES,
+        flash_mode=FLASH,
+        use_thinking=False,
         use_judge=False,
         max_failures=4,
         llm_timeout=90,
