@@ -1,0 +1,18 @@
+.git
+node_modules
+.env*
+!.env.example
+.eve
+.output
+.svelte-kit
+.vercel
+.data
+.chrome-profile
+browser-service/.venv
+__pycache__
+docs/screenshots
+
+# Personal data; mounted at runtime instead
+data/profile.json
+data/profile.json.tmp
+data/resume.*

@@ -1,0 +1,22 @@
+services:
+  jobagent:
+    build: .
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # Localhost only: the agent has no login of its own.
+      - "127.0.0.1:5173:5173"
+    extra_hosts:
+      # Lets the agent reach the browser service on the host (Linux needs this; Docker Desktop has it built in).
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Your profile and resume, shared with the browser service on the host.
+      - ./data:/app/data
+      # Job tracker.
+      - ./.data:/app/.data
+      # Conversations and run state, so chats survive restarts.
+      - workflow-data:/app/.eve/.workflow-data
+
+volumes:
+  workflow-data:

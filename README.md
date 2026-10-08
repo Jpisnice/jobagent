@@ -76,6 +76,15 @@ npm run dev              # chat UI + agent at http://localhost:5173
 
 Open http://localhost:5173 and say hello. With no profile yet, the agent walks you through onboarding from your resume. See [Setup](#setup) for every option, and [Applying](#using-it) for the browser side.
 
+Or with Docker, where only Docker and the `.env` file are needed:
+
+```bash
+cp .env.example .env     # fill it in as above
+docker compose up -d --build   # chat UI + agent at http://localhost:5173
+```
+
+See [Running with Docker](#running-with-docker) for what the container does and doesn't include.
+
 ## Screenshots
 
 <table>
@@ -182,6 +191,16 @@ Set at least these in `.env`:
 
 > [!WARNING]
 > The Gemini model names are `-preview` releases, which Google can change or retire. If one stops working, set the matching variable above.
+
+### Running with Docker
+
+`docker compose up -d --build` builds the agent and the chat UI and runs them in one container, at http://localhost:5173. It needs only Docker and your `.env`; there's no Node install. Unlike `npm run dev`, it runs the production build, so it also runs the daily job search schedule.
+
+- **Your data stays on your machine.** `data/` (profile and resume) and `.data/` (the seen-jobs list) are mounted from the project folder, and chats are kept in a Docker volume, so they all survive restarts and rebuilds.
+- **The browser service still runs on the host.** It drives your own visible Chrome window, so start it with `npm run browser` as usual. The container reaches it at `http://host.docker.internal:8765`, and both sides read the resume from the same `data/` folder.
+- **There's no login.** The container sets `ALLOW_ANONYMOUS=1` and publishes the port on `127.0.0.1` only, so it's as private as `npm run dev`. Don't expose it to a network without adding real auth in `agent/channels/eve.ts`.
+
+Rebuild after changing code with `docker compose up -d --build`; follow logs with `docker compose logs -f`.
 
 ## Using it
 
