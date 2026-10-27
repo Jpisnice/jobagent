@@ -192,3 +192,27 @@ class TestSubmitGate:
         kw, job = built()
         step(kw, {}, action("scroll", down=True), number=6)
         assert job.steps == 6
+
+
+class TestInspectMode:
+    def test_cannot_change_any_field(self, built):
+        kw, _ = built(mode="inspect")
+        actions = kw["tools"].registry.registry.actions
+        for name in server.WRITE_ACTIONS + ["choose_option", "choose_choice"]:
+            assert name not in actions
+        assert "dropdown_options" in actions and "ask_human" in actions
+
+    def test_uses_the_read_only_rules_and_a_structured_report(self, built):
+        kw, _ = built(mode="inspect")
+        assert "Do NOT type, select, upload" in kw["extend_system_message"]
+        assert kw["output_model_schema"] is server.FormReport
+
+    def test_fill_mode_has_no_report_schema(self, built):
+        kw, _ = built()
+        assert kw["output_model_schema"] is None
+
+    def test_submit_gate_still_applies(self, built):
+        kw, job = built(mode="inspect")
+        step(kw, {7: FakeNode("Submit application")}, action("click", index=7))
+        assert job.blocked_submit == "Submit application"
+        assert job.agent.stopped is True

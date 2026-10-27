@@ -234,7 +234,7 @@ curl -X POST http://localhost:5173/eve/v1/dev/schedules/job-search   # or :2000 
 
 ### Applying
 
-In a chat, tell the agent which job to apply to. Before it can open a form, start the browser side in a second terminal and leave it running:
+In a chat, tell the agent which job to apply to, or paste the link to any job posting or application form. Before it can open a form, start the browser side in a second terminal and leave it running:
 
 ```bash
 npm run browser
@@ -242,10 +242,12 @@ npm run browser
 
 This opens Chrome with its own profile and starts the browser service. Sign in to the job sites you use in that window once; it remembers. The agent then:
 
-1. asks you to approve the application (`approve_application`),
-2. fills in the form, uploading your resume from `data/`,
-3. stops on the review step and reports what it filled and what it couldn't,
-4. asks you to approve the final Submit (`browser_submit`).
+1. opens the form and reads its fields without filling anything (`inspect_application`),
+2. answers what it can from your profile and asks you, in one message, for the rest (salary expectation, start date, sponsorship and similar); answers that recur are saved to your profile so the next form doesn't ask again,
+3. asks you to approve the application (`approve_application`),
+4. fills in the form, uploading your resume from `data/`,
+5. stops on the review step and reports what it filled and what it couldn't,
+6. asks you to approve the final Submit (`browser_submit`).
 
 If it hits a login, account creation, CAPTCHA or verification code, it stops and asks you to handle it in the Chrome window, then continues from the same page when you say you are done. Applying never happens from the schedule, because a schedule can't ask you anything.
 
@@ -302,7 +304,7 @@ agent/
   skills/                profile-onboarding, apply-in-browser (loaded on demand)
   tools/                 profile_status, read_resume, save_profile, screen_jobs,
                          fetch_jobs, list_jobs, send_alert, record_job,
-                         draft_application, approve_application, browser_task,
+                         draft_application, inspect_application, approve_application, browser_task,
                          browser_submit, ...
   subagents/matcher/     the fit checker (reached only through screen_jobs)
   schedules/             daily job search

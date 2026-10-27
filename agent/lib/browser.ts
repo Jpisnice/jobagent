@@ -34,7 +34,15 @@ export interface TaskResult {
 
 // Starts a task and waits for it to finish, cancelling it if the turn is aborted.
 export async function runTask(
-  body: { task: string; files?: string[]; maxSteps?: number; key: string; allowSubmit?: boolean },
+  body: {
+    task: string;
+    files?: string[];
+    maxSteps?: number;
+    key: string;
+    allowSubmit?: boolean;
+    // "inspect" only reads the form (no typing, no uploads); the report comes back as JSON in `result`.
+    mode?: "fill" | "inspect";
+  },
   abortSignal?: AbortSignal,
   timeoutMs = 12 * 60_000,
 ): Promise<TaskResult> {
@@ -46,6 +54,7 @@ export async function runTask(
       max_steps: body.maxSteps ?? 60,
       key: body.key,
       allow_submit: body.allowSubmit ?? false,
+      mode: body.mode ?? "fill",
     }),
   });
 

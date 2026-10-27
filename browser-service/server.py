@@ -4,6 +4,7 @@ Runs browser-use (driven by Gemini) against a headed Chrome that you start with
 scripts/browser.ps1. The eve agent calls this over HTTP on 127.0.0.1.
 
   POST /run               start a task, returns {jobId} immediately (idempotent on `key`)
+                          mode "fill" (default) fills a form; mode "inspect" only reads its fields
   GET  /jobs/{id}         status: running | done | failed | needs_human | needs_submit_approval
   POST /jobs/{id}/cancel  stop a running job
   GET  /health
@@ -19,11 +20,12 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
@@ -102,6 +104,44 @@ NO_SUBMIT = (
 )
 DO_SUBMIT = "You may now press the final Submit button once, then report the confirmation message."
 
+INSPECT_RULES = """
+You are READING a job application form in the user's own Chrome window so the user can be asked for
+any missing answers before it is filled in. Rules:
+- Work in the current tab. Open the given URL. If it shows a job posting, click its Apply / Apply for
+  this job button to reach the form. Prefer applying manually over "Apply with LinkedIn" or autofill.
+- Do NOT type, select, upload, tick or change anything. Do not press Next, Continue, Save or Submit.
+  Only scroll, click to reach the form, and read dropdown options with dropdown_options (or open a
+  dropdown, read it, and press Escape without choosing).
+- Never type into password fields and never create an account or sign in. If you hit a login wall,
+  account creation, a CAPTCHA, a verification code or anything else you cannot do, call the
+  ask_human action with a clear reason and stop.
+- Scroll through the whole form and record every field: its label exactly as shown (the full question
+  text for screening questions), its type, whether it is required (asterisk, required or
+  aria-required), and for dropdowns, radio groups and checkbox groups the options as written. For very
+  long lists (countries, schools) give a few options and add "(long list)".
+- If the form continues behind a Next / Continue button, set more_steps to true; do not go there.
+- Finish with done and the structured report.
+"""
+# Built-in actions that change a field. Inspect runs never get them.
+WRITE_ACTIONS = ["input", "upload_file", "send_keys", "select_dropdown"]
+
+
+class FormField(BaseModel):
+    label: str
+    type: str = Field(description="text, email, phone, url, number, date, textarea, dropdown, radio, checkbox, file or other")
+    required: bool
+    options: list[str] = Field(description="Choices of a dropdown, radio or checkbox field; empty otherwise")
+    section: str = Field(description="Heading the field sits under, or empty")
+
+
+class FormReport(BaseModel):
+    title: str = Field(description="Job title as shown on the page")
+    company: str
+    url: str = Field(description="URL of the page the form is on")
+    fields: list[FormField]
+    more_steps: bool = Field(description="True if more fields follow behind a Next / Continue button")
+    notes: str = Field(description="Anything else worth knowing (for example a login needed later), or empty")
+
 
 class RunRequest(BaseModel):
     task: str
@@ -109,6 +149,7 @@ class RunRequest(BaseModel):
     max_steps: int = 60
     key: str | None = None
     allow_submit: bool = False
+    mode: Literal["fill", "inspect"] = "fill"
 
 
 @dataclass
@@ -161,7 +202,8 @@ def node_label(node) -> str:
 
 
 def build_agent(job: Job, req: RunRequest, files: list[str]) -> Agent:
-    tools = Tools()
+    inspect = req.mode == "inspect"
+    tools = Tools(exclude_actions=WRITE_ACTIONS) if inspect else Tools()
 
     @tools.action("Ask the human for help (login, CAPTCHA, verification code, anything you cannot do). Ends the run.")
     async def ask_human(reason: str) -> ActionResult:
@@ -169,7 +211,8 @@ def build_agent(job: Job, req: RunRequest, files: list[str]) -> Agent:
         return ActionResult(is_done=True, success=False, extracted_content=f"Needs human: {reason}")
 
     # The form actions never press Submit, even once it is approved: that stays a plain click.
-    form_actions.register(tools, is_final_submit=is_final_submit)
+    if not inspect:
+        form_actions.register(tools, is_final_submit=is_final_submit)
 
     async def on_step(state, output, step) -> None:
         """Runs after the model picked its actions and before they execute."""
@@ -192,7 +235,7 @@ def build_agent(job: Job, req: RunRequest, files: list[str]) -> Agent:
     # One path per line, exactly as the whitelist holds it (a list repr would double the backslashes).
     listed = "\n".join(files) if files else "none"
     task = f"{req.task}\n\nFiles you may upload (use these exact paths):\n{listed}"
-    rules = RULES.format(submit_rule=DO_SUBMIT if req.allow_submit else NO_SUBMIT)
+    rules = INSPECT_RULES if inspect else RULES.format(submit_rule=DO_SUBMIT if req.allow_submit else NO_SUBMIT)
     api = dict(api_key=API_KEY)
     return Agent(
         task=task,
@@ -203,6 +246,7 @@ def build_agent(job: Job, req: RunRequest, files: list[str]) -> Agent:
         available_file_paths=files,
         extend_system_message=rules,
         register_new_step_callback=on_step,
+        output_model_schema=FormReport if inspect else None,
         use_vision=True,
         vision_detail_level="high",
         include_attributes=INCLUDE_ATTRIBUTES,
@@ -262,6 +306,8 @@ async def run(req: RunRequest, x_token: str | None = Header(default=None)) -> di
         return {"jobId": by_key[req.key]}
     if not API_KEY:
         raise HTTPException(500, "GEMINI_API_KEY is not set")
+    if req.mode == "inspect" and (req.allow_submit or req.files):
+        raise HTTPException(400, "inspect runs only read the form: no files and no submit")
     if run_lock.locked():
         raise HTTPException(409, "another browser task is still running")
     if not await chrome_up():

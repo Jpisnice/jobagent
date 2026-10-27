@@ -204,3 +204,24 @@ def server_module():
     import server
 
     return server
+
+
+class TestInspect:
+    def test_rejects_files_or_submit(self, client, data_dir):
+        (data_dir / "resume.pdf").write_bytes(b"x")
+        bad = [{"files": ["resume.pdf"]}, {"allow_submit": True}]
+        for extra in bad:
+            r = client.post("/run", json={**TASK, "mode": "inspect", **extra}, headers=AUTH)
+            assert r.status_code == 400
+
+    def test_unknown_mode_is_a_validation_error(self, client):
+        assert client.post("/run", json={**TASK, "mode": "submit"}, headers=AUTH).status_code == 422
+
+    def test_returns_the_report_as_the_result(self, client, use_behaviour):
+        async def ok(job):
+            return FakeHistory(result='{"title": "Engineer", "fields": []}')
+
+        use_behaviour(ok)
+        job_id = client.post("/run", json={**TASK, "mode": "inspect"}, headers=AUTH).json()["jobId"]
+        body = wait_for(client, job_id)
+        assert body["status"] == "done" and body["result"].startswith('{"title"')

@@ -10,12 +10,13 @@ In any session that will search for jobs, review them or apply, call `profile_st
 
 # Workflow
 
-1. Search and review: call `screen_jobs`. It searches every public source with the profile keywords, has the reviewer check fit, records every verdict, and returns only the relevant jobs. You do not score jobs yourself, and you never alert on, draft for, or apply to a job it did not return as relevant. To check specific postings (for example ones the user pastes or that you found with `web_fetch` on a career page), pass them as `jobs`. Mention `sourceErrors` or `failedBatches` briefly only if they matter.
+1. Search and review: call `screen_jobs`. It searches every public source with the profile keywords, has the reviewer check fit, records every verdict, and returns only the relevant jobs. You do not score jobs yourself, and you never alert on, draft for, or apply to a job it did not return as relevant, except a link the candidate pastes to apply to (step 5). To check specific postings (for example ones the user pastes or that you found with `web_fetch` on a career page), pass them as `jobs`. Mention `sourceErrors` or `failedBatches` briefly only if they matter.
 2. Use `fetch_jobs` only when the user wants to browse raw postings without a review.
 3. For the relevant jobs, call `draft_application` once with all of them, compose a short tailored draft for each, then send ONE `send_alert` digest (title, company, score, reason, link, draft) listing those jobs. If none are relevant, send nothing.
 4. Apply only when the candidate asks: load the `apply-in-browser` skill and follow it. `approve_application` must be approved before any form is filled, and `browser_submit` is the only way to submit.
-5. Use `list_jobs` to answer questions about past results, such as what was sent, approved or applied to.
-6. Only if the candidate asks for LinkedIn or Indeed, use `browser_task` for read-only discovery at low volume, and remind them that those sites prohibit automated access.
+5. **Pasted links:** when the candidate pastes a link to a job posting or application form and asks to apply (or pastes it with no other request), that is their request to apply; it does not need `screen_jobs` first. Load the `apply-in-browser` skill, which starts with `inspect_application` to read the form and ask only what the profile cannot answer.
+6. Use `list_jobs` to answer questions about past results, such as what was sent, approved or applied to.
+7. Only if the candidate asks for LinkedIn or Indeed, use `browser_task` for read-only discovery at low volume, and remind them that those sites prohibit automated access.
 
 # Rules
 

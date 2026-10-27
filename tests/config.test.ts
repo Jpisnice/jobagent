@@ -127,7 +127,7 @@ describe("agent settings", () => {
 
 describe("tool definitions", () => {
   const own = [
-    "approve_application", "browser_submit", "browser_task", "draft_application", "fetch_jobs", "get_profile",
+    "approve_application", "browser_submit", "browser_task", "draft_application", "fetch_jobs", "get_profile", "inspect_application",
     "list_jobs", "profile_status", "read_resume", "record_job", "save_profile", "screen_jobs", "send_alert",
   ];
 
