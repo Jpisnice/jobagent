@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { useProfile } from "./fixtures";
 import { freshStore, jsonResponse, parseInput, stubFetch, textResponse, toolCtx } from "./helpers";
 
@@ -230,5 +232,73 @@ describe("browser_submit", () => {
     const out = await call(await load("browser_submit"), input);
     expect(out).toMatchObject({ status: "failed", reason: "button not found" });
     expect(out.next).toMatch(/failed/);
+  });
+});
+
+describe("inspect_application", () => {
+  const url = "https://boards.example.com/acme/jobs/1";
+  const report = {
+    title: "Engineer",
+    company: "Acme",
+    url: `${url}/apply`,
+    fields: [
+      { label: "Email", type: "email", required: true, options: [], section: "" },
+      { label: "Will you require sponsorship?", type: "radio", required: true, options: ["Yes", "No"], section: "Questions" },
+    ],
+    more_steps: false,
+    notes: "",
+  };
+  const done = (result: unknown) => ({ status: "done", steps: 6, seconds: 20, result: JSON.stringify(result), reason: null });
+
+  it("runs a read-only inspect task with no files and no submitting", async () => {
+    runTask.mockResolvedValue(done(report));
+    await call(await load("inspect_application"), { url }, "call-read");
+    const [body] = runTask.mock.calls[0]!;
+    expect(body).toMatchObject({ mode: "inspect", key: "call-read" });
+    expect(body.task).toContain(url);
+    expect(body.files).toBeUndefined();
+    expect(body.allowSubmit).toBeUndefined();
+  });
+
+  it("returns the fields with the profile and the uploadable files so gaps can be asked about", async () => {
+    writeFileSync(join(profile.dataDir, "resume.pdf"), "x");
+    writeFileSync(join(profile.dataDir, "notes.txt"), "x");
+    runTask.mockResolvedValue(done(report));
+    const out = await call(await load("inspect_application"), { url });
+    expect(out).toMatchObject({ status: "done", job: { title: "Engineer", company: "Acme", formUrl: `${url}/apply` }, moreSteps: false });
+    expect(out.fields).toHaveLength(2);
+    expect(out.profile.contact.email).toBe("test.candidate@example.com");
+    expect(out.files).toEqual(["resume.pdf"]);
+    expect(out.next).toMatch(/ask_question/);
+  });
+
+  it("fills in what the model left out of a field instead of dropping the report", async () => {
+    runTask.mockResolvedValue(done({ ...report, fields: [{ label: "Phone" }], more_steps: undefined }));
+    const out = await call(await load("inspect_application"), { url });
+    expect(out.fields).toEqual([{ label: "Phone", type: "other", required: false, options: [], section: "" }]);
+  });
+
+  it("asks the user for help when the site needs a login", async () => {
+    runTask.mockResolvedValue({ status: "needs_human", steps: 2, seconds: 5, result: null, reason: "Sign in to Workday" });
+    const out = await call(await load("inspect_application"), { url });
+    expect(out).toMatchObject({ status: "needs_human", reason: "Sign in to Workday" });
+    expect(out.next).toMatch(/ask_question.*inspect_application/);
+  });
+
+  it.each([
+    ["not JSON", "I looked at the form"],
+    ["no fields", JSON.stringify({ ...report, fields: [] })],
+  ])("reports a failure when the report is %s", async (_name, result) => {
+    runTask.mockResolvedValue({ status: "done", steps: 3, seconds: 9, result, reason: null });
+    const out = await call(await load("inspect_application"), { url });
+    expect(out.status).toBe("failed");
+    expect(out.next).toMatch(/browser_task/);
+  });
+
+  it("needs a profile before it opens the browser", async () => {
+    profile.cleanup();
+    profile = useProfile(null);
+    await expect(call(await load("inspect_application"), { url })).rejects.toThrow(/profile/);
+    expect(runTask).not.toHaveBeenCalled();
   });
 });

@@ -26,14 +26,14 @@ describe("runTask", () => {
     expect(start.url).toBe("http://svc.test:8765/run");
     expect((start.init!.headers as Record<string, string>)["x-token"]).toBe("secret-token");
     expect(JSON.parse(start.init!.body as string)).toEqual({
-      task: "fill it", files: ["resume.pdf"], max_steps: 40, key: "k1", allow_submit: true,
+      task: "fill it", files: ["resume.pdf"], max_steps: 40, key: "k1", allow_submit: true, mode: "fill",
     });
   });
 
   it("defaults to no files, 60 steps and no submitting", async () => {
     const { calls } = stubFetch({ "/run": { jobId: "j1" }, "/jobs/j1": job("done") });
     await settle(runTask({ task: "t", key: "k" }));
-    expect(JSON.parse(calls[0]!.init!.body as string)).toMatchObject({ files: [], max_steps: 60, allow_submit: false });
+    expect(JSON.parse(calls[0]!.init!.body as string)).toMatchObject({ files: [], max_steps: 60, allow_submit: false, mode: "fill" });
   });
 
   it("polls every few seconds until the job leaves the running state", async () => {
